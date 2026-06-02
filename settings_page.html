@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Settings</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #F5F5F7;
+    --surface: #FFFFFF;
+    --surface2: #F0F0F2;
+    --border: rgba(0,0,0,0.08);
+    --text: #1A1A1E;
+    --muted: #6E6E78;
+    --hint: #AEAEB8;
+    --accent: #4F46E5;
+    --accent-light: #EEF2FF;
+    --accent-muted: #818CF8;
+    --danger: #E5484D;
+    --success: #30A46C;
+    --warn: #F76B15;
+    --radius: 14px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04);
+  }
+
+  [data-theme="dark"] {
+    --bg: #0F0F12;
+    --surface: #1C1C22;
+    --surface2: #26262E;
+    --border: rgba(255,255,255,0.08);
+    --text: #F0F0F5;
+    --muted: #9090A0;
+    --hint: #505060;
+    --accent: #818CF8;
+    --accent-light: #1E1B4B;
+    --accent-muted: #4F46E5;
+    --danger: #F87171;
+    --success: #4ADE80;
+    --warn: #FB923C;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 0 0 40px;
+  }
+
+  .phone-shell {
+    width: 390px;
+    min-height: 100vh;
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .status-bar {
+    height: 44px;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  .status-icons { display: flex; gap: 6px; align-items: center; }
+  .status-icons i { font-size: 15px; }
+
+  /* NAV BAR */
+  .nav-bar {
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    padding: 0 8px 0 4px;
+    height: 52px;
+    position: sticky;
+    top: 44px;
+    z-index: 99;
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  .nav-back {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--accent);
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s;
+  }
+  .nav-back:hover { background: var(--surface2); }
+
+  .nav-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+    text-align: center;
+  }
+
+  .nav-action {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--accent);
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s;
+  }
+  .nav-action:hover { background: var(--surface2); }
+
+  /* SCREENS */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* SECTION GROUP */
+  .section-group {
+    margin: 20px 16px 0;
+  }
+
+  .section-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0 4px 8px;
+  }
+
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    padding: 13px 16px;
+    gap: 14px;
+    cursor: pointer;
+    transition: background 0.12s;
+    position: relative;
+    min-height: 52px;
+  }
+
+  .row:hover { background: var(--surface2); }
+
+  .row + .row::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 16px; right: 0;
+    height: 0.5px;
+    background: var(--border);
+  }
+
+  .row-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    flex-shrink: 0;
+  }
+
+  .row-icon.purple { background: #EEF2FF; color: #4F46E5; }
+  .row-icon.teal   { background: #E6FBF5; color: #0F766E; }
+  .row-icon.orange { background: #FFF4E6; color: #C2410C; }
+  .row-icon.pink   { background: #FDF2F8; color: #BE185D; }
+  .row-icon.blue   { background: #EFF6FF; color: #1D4ED8; }
+  .row-icon.green  { background: #F0FDF4; color: #16A34A; }
+  .row-icon.red    { background: #FEF2F2; color: #DC2626; }
+  .row-icon.gray   { background: var(--surface2); color: var(--muted); }
+  .row-icon.amber  { background: #FFFBEB; color: #B45309; }
+  .row-icon.indigo { background: #EEF2FF; color: #6366F1; }
+
+  [data-theme="dark"] .row-icon.purple { background: #1E1B4B; color: #A5B4FC; }
+  [data-theme="dark"] .row-icon.teal   { background: #042F2E; color: #5EEAD4; }
+  [data-theme="dark"] .row-icon.orange { background: #431407; color: #FB923C; }
+  [data-theme="dark"] .row-icon.pink   { background: #500724; color: #F9A8D4; }
+  [data-theme="dark"] .row-icon.blue   { background: #1E3A5F; color: #93C5FD; }
+  [data-theme="dark"] .row-icon.green  { background: #052E16; color: #86EFAC; }
+  [data-theme="dark"] .row-icon.red    { background: #450A0A; color: #FCA5A5; }
+  [data-theme="dark"] .row-icon.amber  { background: #422006; color: #FCD34D; }
+  [data-theme="dark"] .row-icon.indigo { background: #1E1B4B; color: #C7D2FE; }
+
+  .row-body { flex: 1; min-width: 0; }
+  .row-title { font-size: 15px; color: var(--text); font-weight: 400; }
+  .row-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+
+  .row-right { display: flex; align-items: center; gap: 6px; color: var(--hint); font-size: 13px; }
+  .row-right i { font-size: 16px; color: var(--hint); }
+
+  /* TOGGLE */
+  .toggle {
+    width: 46px;
+    height: 26px;
+    background: var(--hint);
+    border-radius: 13px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+    border: none;
+    outline: none;
+    padding: 0;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 20px; height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle:checked { background: var(--accent); }
+  .toggle:checked::after { transform: translateX(20px); }
+
+  /* VALUE BADGE */
+  .val-badge {
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--surface2);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* PROFILE CARD */
+  .profile-card {
+    margin: 20px 16px 0;
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 20px 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .profile-card:hover { background: var(--surface2); }
+
+  .avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4F46E5, #818CF8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 22px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .profile-info { flex: 1; }
+  .profile-name { font-size: 17px; font-weight: 600; color: var(--text); }
+  .profile-email { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .profile-badge {
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--accent-light);
+    color: var(--accent);
+    padding: 3px 8px;
+    border-radius: 20px;
+    margin-top: 6px;
+    display: inline-block;
+  }
+
+  /* MODAL OVERLAY */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 200;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .modal-backdrop.open { display: flex; }
+
+  .modal-sheet {
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    width: 390px;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding-bottom: 32px;
+    animation: slideUp 0.25s ease;
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+
+  .modal-handle {
+    width: 36px; height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 12px auto 16px;
+  }
+
+  .modal-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    padding: 0 20px 16px;
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  .modal-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    cursor: pointer;
+    font-size: 15px;
+    color: var(--text);
+    transition: background 0.12s;
+  }
+  .modal-option:hover { background: var(--surface2); }
+  .modal-option i { color: var(--accent); font-size: 18px; }
+
+  .modal-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 16px;
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+  }
+  .modal-search i { color: var(--muted); font-size: 17px; }
+  .modal-search input {
+    border: none;
+    background: none;
+    outline: none;
+    font-size: 15px;
+    color: var(--text);
+    flex: 1;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .modal-search input::placeholder { color: var(--hint); }
+
+  /* SIGN IN BTN */
+  .signin-btn {
+    margin: 20px 16px 0;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    width: calc(100% - 32px);
+    padding: 16px;
+    font-size: 16px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: opacity 0.15s;
+    box-shadow: 0 4px 12px rgba(79,70,229,0.3);
+  }
+  .signin-btn:hover { opacity: 0.92; }
+
+  .danger-row .row-title { color: var(--danger); }
+  .danger-row .row-icon { background: #FEF2F2; color: var(--danger); }
+  [data-theme="dark"] .danger-row .row-icon { background: #450A0A; }
+
+  .version-text {
+    text-align: center;
+    font-size: 12px;
+    color: var(--hint);
+    padding: 28px 0 8px;
+  }
+
+  /* SEARCH AREA IN MAIN */
+  .search-bar {
+    margin: 16px 16px 0;
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    box-shadow: var(--shadow);
+  }
+  .search-bar i { color: var(--hint); font-size: 18px; }
+  .search-bar input {
+    border: none; background: none; outline: none;
+    font-size: 15px; color: var(--text); flex: 1;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .search-bar input::placeholder { color: var(--hint); }
+
+  /* NOTIFICATION BADGE */
+  .notif-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--danger);
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<!-- MODAL BACKDROP -->
+<div class="modal-backdrop" id="modal" onclick="closeModal(event)">
+  <div class="modal-sheet" id="modalSheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modalTitle">Choose option</div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<div class="phone-shell">
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <span style="font-weight:600">9:41</span>
+    <div class="status-icons">
+      <i class="ti ti-wifi" aria-hidden="true"></i>
+      <i class="ti ti-signal-4g" aria-hidden="true"></i>
+      <i class="ti ti-battery-3" aria-hidden="true"></i>
+    </div>
+  </div>
+
+  <!-- NAV BAR -->
+  <div class="nav-bar">
+    <button class="nav-back" id="backBtn" onclick="goBack()" aria-label="Back" style="visibility:hidden">
+      <i class="ti ti-chevron-left" aria-hidden="true"></i>
+    </button>
+    <span class="nav-title" id="navTitle">Settings</span>
+    <button class="nav-action" onclick="toggleTheme()" aria-label="Toggle theme">
+      <i class="ti ti-moon-stars" id="themeIcon" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: Main Settings
+  ════════════════════════════════════════════ -->
+  <div class="screen active" id="screen-main">
+
+    <!-- Profile / Sign In -->
+    <div class="profile-card" onclick="navigate('signin')">
+      <div class="avatar">A</div>
+      <div class="profile-info">
+        <div class="profile-name">Alex Johnson</div>
+        <div class="profile-email">alex@example.com</div>
+        <div class="profile-badge">Signed In</div>
+      </div>
+      <i class="ti ti-chevron-right" style="color:var(--hint);font-size:18px" aria-hidden="true"></i>
+    </div>
+
+    <!-- Search -->
+    <div class="search-bar">
+      <i class="ti ti-search" aria-hidden="true"></i>
+      <input type="text" placeholder="Search settings…" oninput="filterSettings(this.value)">
+    </div>
+
+    <!-- General -->
+    <div class="section-group">
+      <div class="section-label">General</div>
+      <div class="card" id="settingsList">
+
+        <div class="row" onclick="navigate('notifications')">
+          <div class="row-icon orange"><i class="ti ti-bell" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Notifications &amp; Reminders</div>
+            <div class="row-sub">Alerts, ringtones, reminders</div>
+          </div>
+          <div class="row-right"><div class="notif-dot"></div><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="navigate('theme')">
+          <div class="row-icon purple"><i class="ti ti-palette" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Theme</div>
+            <div class="row-sub">Appearance &amp; colors</div>
+          </div>
+          <div class="row-right"><span class="val-badge" id="themeVal">System</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="navigate('calsync')">
+          <div class="row-icon blue"><i class="ti ti-calendar-event" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Sync Calendar</div>
+            <div class="row-sub">Connect your calendars</div>
+          </div>
+          <div class="row-right"><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="navigate('widget')">
+          <div class="row-icon teal"><i class="ti ti-layout-dashboard" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Widget</div>
+            <div class="row-sub">Home screen widget settings</div>
+          </div>
+          <div class="row-right"><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="navigate('datetime')">
+          <div class="row-icon green"><i class="ti ti-clock" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Date &amp; Time</div>
+            <div class="row-sub">Format, timezone, first day</div>
+          </div>
+          <div class="row-right"><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Preferences -->
+    <div class="section-group">
+      <div class="section-label">Preferences</div>
+      <div class="card">
+
+        <div class="row">
+          <div class="row-icon amber"><i class="ti ti-music" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Task Completion Tone</div>
+            <div class="row-sub">Play sound on task done</div>
+          </div>
+          <input type="checkbox" class="toggle" id="toneToggle" checked aria-label="Task completion tone">
+        </div>
+
+        <div class="row">
+          <div class="row-icon pink"><i class="ti ti-sparkles" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Task Completion Animation</div>
+            <div class="row-sub">Show confetti animation</div>
+          </div>
+          <input type="checkbox" class="toggle" id="animToggle" checked aria-label="Task completion animation">
+        </div>
+
+        <div class="row" onclick="openModal('Default Category', categoryOptions)">
+          <div class="row-icon indigo"><i class="ti ti-tag" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Default Category</div>
+            <div class="row-sub">For new tasks</div>
+          </div>
+          <div class="row-right"><span class="val-badge" id="catVal">Inbox</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="openModal('Language', languageOptions)">
+          <div class="row-icon teal"><i class="ti ti-language" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Language</div>
+          </div>
+          <div class="row-right"><span class="val-badge" id="langVal">English</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- About -->
+    <div class="section-group">
+      <div class="section-label">About</div>
+      <div class="card">
+
+        <div class="row" onclick="navigate('about')">
+          <div class="row-icon gray"><i class="ti ti-info-circle" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">About</div></div>
+          <div class="row-right"><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Sign In Button -->
+    <button class="signin-btn" onclick="navigate('signin')">
+      <i class="ti ti-user-circle" aria-hidden="true"></i>
+      Manage Account
+    </button>
+
+    <div class="version-text">TaskFlow v3.4.1 · Build 2025.05</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: Notifications & Reminders
+  ════════════════════════════════════════════ -->
+  <div class="screen" id="screen-notifications">
+
+    <div class="section-group">
+      <div class="section-label">Reminder Defaults</div>
+      <div class="card">
+        <div class="row" onclick="openModal('Task Reminder Default Time', reminderTimeOptions)">
+          <div class="row-icon orange"><i class="ti ti-clock-hour-3" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Task Reminder Default Time</div>
+          </div>
+          <div class="row-right"><span class="val-badge" id="remTimeVal">9:00 AM</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="openModal('Default Task Reminder Type', reminderTypeOptions)">
+          <div class="row-icon amber"><i class="ti ti-bell-ringing" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Default Task Reminder Type</div>
+          </div>
+          <div class="row-right"><span class="val-badge" id="remTypeVal">Notification</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-group">
+      <div class="section-label">Sounds</div>
+      <div class="card">
+        <div class="row" onclick="openModal('Default Notification Ringtone', ringtoneOptions)">
+          <div class="row-icon green"><i class="ti ti-music" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Default Notification Ringtone</div>
+          </div>
+          <div class="row-right"><span class="val-badge" id="notifRingVal">Chime</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="openModal('Default Alarm Ringtone', ringtoneOptions)">
+          <div class="row-icon red"><i class="ti ti-alarm" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Default Alarm Ringtone</div>
+          </div>
+          <div class="row-right"><span class="val-badge" id="alarmRingVal">Radar</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-group">
+      <div class="section-label">Behavior</div>
+      <div class="card">
+
+        <div class="row">
+          <div class="row-icon blue"><i class="ti ti-lock" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Screen Lock Task Reminder</div>
+            <div class="row-sub">Show on lock screen</div>
+          </div>
+          <input type="checkbox" class="toggle" checked aria-label="Screen lock task reminder">
+        </div>
+
+        <div class="row">
+          <div class="row-icon purple"><i class="ti ti-layout-navbar" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Add Tasks from Notification Bar</div>
+            <div class="row-sub">Quick-add from pull-down</div>
+          </div>
+          <input type="checkbox" class="toggle" checked aria-label="Add tasks from notification bar">
+        </div>
+
+        <div class="row">
+          <div class="row-icon teal"><i class="ti ti-list-details" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Task Overview</div>
+            <div class="row-sub">Daily summary notification</div>
+          </div>
+          <input type="checkbox" class="toggle" aria-label="Task overview">
+        </div>
+
+        <div class="row">
+          <div class="row-icon amber"><i class="ti ti-sunrise" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Morning Plan</div>
+            <div class="row-sub">Daily morning briefing</div>
+          </div>
+          <input type="checkbox" class="toggle" checked aria-label="Morning plan">
+        </div>
+
+        <div class="row">
+          <div class="row-icon pink"><i class="ti ti-moon" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Evening Review</div>
+            <div class="row-sub">End-of-day recap</div>
+          </div>
+          <input type="checkbox" class="toggle" aria-label="Evening review">
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: Theme
+  ════════════════════════════════════════════ -->
+  <div class="screen" id="screen-theme">
+
+    <div class="section-group">
+      <div class="section-label">Appearance</div>
+      <div class="card">
+        <div class="row" onclick="setThemeOption('Light')">
+          <div class="row-icon amber"><i class="ti ti-sun" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Light</div></div>
+          <div class="row-right" id="themeLight"><i class="ti ti-check" style="color:var(--accent)" aria-hidden="true"></i></div>
+        </div>
+        <div class="row" onclick="setThemeOption('Dark')">
+          <div class="row-icon indigo"><i class="ti ti-moon" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Dark</div></div>
+          <div class="row-right" id="themeDark"></div>
+        </div>
+        <div class="row" onclick="setThemeOption('System')">
+          <div class="row-icon gray"><i class="ti ti-device-mobile" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">System Default</div></div>
+          <div class="row-right" id="themeSystem"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-group">
+      <div class="section-label">Accent Color</div>
+      <div class="card" style="padding:16px">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+          <div class="accent-dot active" style="background:#4F46E5" onclick="setAccent('#4F46E5','#EEF2FF','#818CF8')" aria-label="Indigo"></div>
+          <div class="accent-dot" style="background:#0F766E" onclick="setAccent('#0F766E','#E6FBF5','#5EEAD4')" aria-label="Teal"></div>
+          <div class="accent-dot" style="background:#DC2626" onclick="setAccent('#DC2626','#FEF2F2','#F87171')" aria-label="Red"></div>
+          <div class="accent-dot" style="background:#B45309" onclick="setAccent('#B45309','#FFFBEB','#FCD34D')" aria-label="Amber"></div>
+          <div class="accent-dot" style="background:#BE185D" onclick="setAccent('#BE185D','#FDF2F8','#F9A8D4')" aria-label="Pink"></div>
+          <div class="accent-dot" style="background:#16A34A" onclick="setAccent('#16A34A','#F0FDF4','#86EFAC')" aria-label="Green"></div>
+          <div class="accent-dot" style="background:#1D4ED8" onclick="setAccent('#1D4ED8','#EFF6FF','#93C5FD')" aria-label="Blue"></div>
+          <div class="accent-dot" style="background:#7C3AED" onclick="setAccent('#7C3AED','#F5F3FF','#C4B5FD')" aria-label="Purple"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: Calendar Sync
+  ════════════════════════════════════════════ -->
+  <div class="screen" id="screen-calsync">
+
+    <div class="section-group">
+      <div class="section-label">Connected Calendars</div>
+      <div class="card">
+        <div class="row">
+          <div class="row-icon blue"><i class="ti ti-brand-google" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Google Calendar</div>
+            <div class="row-sub">alex@gmail.com</div>
+          </div>
+          <input type="checkbox" class="toggle" checked aria-label="Google Calendar sync">
+        </div>
+        <div class="row">
+          <div class="row-icon indigo"><i class="ti ti-brand-apple" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Apple Calendar</div>
+            <div class="row-sub">Not connected</div>
+          </div>
+          <input type="checkbox" class="toggle" aria-label="Apple Calendar sync">
+        </div>
+        <div class="row">
+          <div class="row-icon blue"><i class="ti ti-brand-office" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Outlook Calendar</div>
+            <div class="row-sub">Not connected</div>
+          </div>
+          <input type="checkbox" class="toggle" aria-label="Outlook Calendar sync">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-group">
+      <div class="section-label">Sync Options</div>
+      <div class="card">
+        <div class="row" onclick="openModal('Sync Direction', syncDirOptions)">
+          <div class="row-icon teal"><i class="ti ti-arrows-exchange" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Sync Direction</div></div>
+          <div class="row-right"><span class="val-badge" id="syncDirVal">Two-way</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+        <div class="row" onclick="openModal('Sync Frequency', syncFreqOptions)">
+          <div class="row-icon green"><i class="ti ti-refresh" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Sync Frequency</div></div>
+          <div class="row-right"><span class="val-badge" id="syncFreqVal">15 min</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin:20px 16px 0">
+      <button class="signin-btn" style="background:var(--surface);color:var(--accent);box-shadow:var(--shadow);border:0.5px solid var(--border)">
+        <i class="ti ti-refresh" aria-hidden="true"></i>
+        Sync Now
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: Widget
+  ════════════════════════════════════════════ -->
+  <div class="screen" id="screen-widget">
+
+    <div class="section-group">
+      <div class="section-label">Widget Appearance</div>
+      <div class="card">
+        <div class="row" onclick="openModal('Widget Style', widgetStyleOptions)">
+          <div class="row-icon teal"><i class="ti ti-layout-2" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Widget Style</div></div>
+          <div class="row-right"><span class="val-badge" id="widgetStyleVal">Compact</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+        <div class="row" onclick="openModal('Widget Size', widgetSizeOptions)">
+          <div class="row-icon purple"><i class="ti ti-resize" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Widget Size</div></div>
+          <div class="row-right"><span class="val-badge" id="widgetSizeVal">Medium</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-group">
+      <div class="section-label">Widget Content</div>
+      <div class="card">
+        <div class="row">
+          <div class="row-icon green"><i class="ti ti-checkbox" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Show Completed Tasks</div>
+          </div>
+          <input type="checkbox" class="toggle" aria-label="Show completed tasks in widget">
+        </div>
+        <div class="row">
+          <div class="row-icon amber"><i class="ti ti-star" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Show Priority Tasks Only</div>
+          </div>
+          <input type="checkbox" class="toggle" checked aria-label="Show priority tasks only in widget">
+        </div>
+        <div class="row" onclick="openModal('Tasks to Show', tasksCountOptions)">
+          <div class="row-icon blue"><i class="ti ti-list-numbers" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Number of Tasks</div></div>
+          <div class="row-right"><span class="val-badge" id="tasksCountVal">5</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: Date & Time
+  ════════════════════════════════════════════ -->
+  <div class="screen" id="screen-datetime">
+
+    <div class="section-group">
+      <div class="section-label">Date &amp; Time Preferences</div>
+      <div class="card">
+
+        <div class="row" onclick="openModal('First Day of Week', firstDayOptions)">
+          <div class="row-icon blue"><i class="ti ti-calendar-week" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">First Day of Week</div></div>
+          <div class="row-right"><span class="val-badge" id="firstDayVal">Sunday</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="openModal('Time Format', timeFormatOptions)">
+          <div class="row-icon green"><i class="ti ti-clock-hour-4" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Time Format</div></div>
+          <div class="row-right"><span class="val-badge" id="timeFormatVal">12 hour</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="openModal('Date Format', dateFormatOptions)">
+          <div class="row-icon amber"><i class="ti ti-calendar" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Date Format</div></div>
+          <div class="row-right"><span class="val-badge" id="dateFormatVal">d/m/y</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="openModal('Default Due Date', dueDateOptions)">
+          <div class="row-icon pink"><i class="ti ti-calendar-due" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Default Due Date</div></div>
+          <div class="row-right"><span class="val-badge" id="dueDateVal">Today</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="openSearchModal('Time Zone', timezones, 'tzVal')">
+          <div class="row-icon teal"><i class="ti ti-world" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Time Zone</div></div>
+          <div class="row-right"><span class="val-badge" id="tzVal">UTC+0</span><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: Sign In
+  ════════════════════════════════════════════ -->
+  <div class="screen" id="screen-signin">
+
+    <div class="section-group" style="margin-top:32px">
+      <div style="text-align:center;padding:20px 0 28px">
+        <div class="avatar" style="margin:0 auto 16px;width:72px;height:72px;font-size:28px">A</div>
+        <div style="font-size:20px;font-weight:600;color:var(--text)">Alex Johnson</div>
+        <div style="font-size:14px;color:var(--muted);margin-top:4px">alex@example.com</div>
+        <div style="font-size:12px;color:var(--success);margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px">
+          <i class="ti ti-circle-check-filled" aria-hidden="true"></i> Account synced
+        </div>
+      </div>
+    </div>
+
+    <div class="section-group">
+      <div class="card">
+        <div class="row">
+          <div class="row-icon blue"><i class="ti ti-cloud-upload" aria-hidden="true"></i></div>
+          <div class="row-body">
+            <div class="row-title">Account Sync</div>
+            <div class="row-sub">Last synced 2 min ago</div>
+          </div>
+          <input type="checkbox" class="toggle" checked aria-label="Account sync">
+        </div>
+        <div class="row" onclick="alert('Sync now triggered')">
+          <div class="row-icon teal"><i class="ti ti-refresh" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Sync Now</div></div>
+          <div class="row-right"><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-group">
+      <div class="card">
+        <div class="row" onclick="alert('Change password')">
+          <div class="row-icon gray"><i class="ti ti-key" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Change Password</div></div>
+          <div class="row-right"><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+        <div class="row" onclick="alert('Manage devices')">
+          <div class="row-icon purple"><i class="ti ti-devices" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Manage Devices</div></div>
+          <div class="row-right"><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-group">
+      <div class="card">
+        <div class="row danger-row" onclick="alert('Sign out')">
+          <div class="row-icon"><i class="ti ti-logout" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Sign Out</div></div>
+        </div>
+        <div class="row danger-row" onclick="alert('Delete account')">
+          <div class="row-icon"><i class="ti ti-trash" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Delete Account</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: About
+  ════════════════════════════════════════════ -->
+  <div class="screen" id="screen-about">
+
+    <div style="text-align:center;padding:32px 16px 24px">
+      <div style="width:72px;height:72px;border-radius:18px;background:linear-gradient(135deg,#4F46E5,#818CF8);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:30px;color:#fff">
+        <i class="ti ti-checkbox" aria-hidden="true"></i>
+      </div>
+      <div style="font-size:20px;font-weight:600;color:var(--text)">TaskFlow</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px">Version 3.4.1 (Build 2025.05)</div>
+    </div>
+
+    <div class="section-group" style="margin-top:0">
+      <div class="card">
+
+        <div class="row" onclick="alert('Opening FAQ...')">
+          <div class="row-icon blue"><i class="ti ti-help-circle" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">FAQ</div></div>
+          <div class="row-right"><i class="ti ti-external-link" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="alert('Opening feedback form...')">
+          <div class="row-icon green"><i class="ti ti-message-heart" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Feedback</div></div>
+          <div class="row-right"><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="alert('Share link copied!')">
+          <div class="row-icon teal"><i class="ti ti-share" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Share App</div></div>
+          <div class="row-right"><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="alert('Opening social page...')">
+          <div class="row-icon pink"><i class="ti ti-heart" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Follow Us</div></div>
+          <div class="row-right"><i class="ti ti-external-link" aria-hidden="true"></i></div>
+        </div>
+
+        <div class="row" onclick="alert('Opening Privacy Policy...')">
+          <div class="row-icon gray"><i class="ti ti-shield-check" aria-hidden="true"></i></div>
+          <div class="row-body"><div class="row-title">Privacy Policy</div></div>
+          <div class="row-right"><i class="ti ti-external-link" aria-hidden="true"></i></div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="version-text">
+      Made with ♥ by TaskFlow Team<br>
+      © 2025 TaskFlow Inc. All rights reserved.
+    </div>
+  </div>
+
+</div><!-- /phone-shell -->
+
+<style>
+  .accent-dot {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 3px solid transparent;
+    transition: border 0.15s, transform 0.15s;
+  }
+  .accent-dot:hover { transform: scale(1.1); }
+  .accent-dot.active { border-color: var(--text); }
+</style>
+
+<script>
+  const screenHistory = [];
+  const screenTitles = {
+    main: 'Settings',
+    notifications: 'Notifications',
+    theme: 'Theme',
+    calsync: 'Calendar Sync',
+    widget: 'Widget',
+    datetime: 'Date & Time',
+    signin: 'Account',
+    about: 'About'
+  };
+
+  function navigate(id) {
+    const cur = document.querySelector('.screen.active');
+    cur.classList.remove('active');
+    screenHistory.push(cur.id.replace('screen-', ''));
+    document.getElementById('screen-' + id).classList.add('active');
+    document.getElementById('navTitle').textContent = screenTitles[id] || id;
+    document.getElementById('backBtn').style.visibility = 'visible';
+  }
+
+  function goBack() {
+    if (!screenHistory.length) return;
+    document.querySelector('.screen.active').classList.remove('active');
+    const prev = screenHistory.pop();
+    document.getElementById('screen-' + prev).classList.add('active');
+    document.getElementById('navTitle').textContent = screenTitles[prev] || prev;
+    if (!screenHistory.length) document.getElementById('backBtn').style.visibility = 'hidden';
+  }
+
+  function toggleTheme() {
+    const body = document.documentElement;
+    const isDark = body.getAttribute('data-theme') === 'dark';
+    body.setAttribute('data-theme', isDark ? '' : 'dark');
+    document.getElementById('themeIcon').className = isDark ? 'ti ti-moon-stars' : 'ti ti-sun';
+  }
+
+  /* ---- MODAL ---- */
+  let currentTarget = null;
+
+  function openModal(title, options) {
+    document.getElementById('modalTitle').textContent = title;
+    const body = document.getElementById('modalBody');
+    body.innerHTML = '';
+    options.forEach(o => {
+      const el = document.createElement('div');
+      el.className = 'modal-option';
+      el.innerHTML = `<span>${o.label}</span>${o.active ? '<i class="ti ti-check" aria-hidden="true"></i>' : ''}`;
+      el.onclick = () => { if (o.action) o.action(); closeModal(); };
+      body.appendChild(el);
+    });
+    document.getElementById('modal').classList.add('open');
+  }
+
+  function openSearchModal(title, items, targetId) {
+    document.getElementById('modalTitle').textContent = title;
+    const body = document.getElementById('modalBody');
+    body.innerHTML = `<div class="modal-search"><i class="ti ti-search" aria-hidden="true"></i><input type="text" placeholder="Search…" oninput="filterModal(this.value, '${targetId}', ${JSON.stringify(items).replace(/'/g, "\\'")})" id="modalSearchInput"></div><div id="modalList"></div>`;
+    renderModalList(items, targetId);
+    document.getElementById('modal').classList.add('open');
+    setTimeout(() => document.getElementById('modalSearchInput')?.focus(), 300);
+  }
+
+  function renderModalList(items, targetId) {
+    const list = document.getElementById('modalList');
+    if (!list) return;
+    list.innerHTML = '';
+    items.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'modal-option';
+      el.innerHTML = `<span>${item}</span>`;
+      el.onclick = () => {
+        const el2 = document.getElementById(targetId);
+        if (el2) el2.textContent = item;
+        closeModal();
+      };
+      list.appendChild(el);
+    });
+  }
+
+  function filterModal(query, targetId, items) {
+    const filtered = items.filter(i => i.toLowerCase().includes(query.toLowerCase()));
+    renderModalList(filtered, targetId);
+  }
+
+  function closeModal(e) {
+    if (!e || e.target === document.getElementById('modal')) {
+      document.getElementById('modal').classList.remove('open');
+    }
+  }
+
+  function setThemeOption(val) {
+    ['Light','Dark','System'].forEach(v => {
+      document.getElementById('theme'+v).innerHTML = v === val
+        ? '<i class="ti ti-check" style="color:var(--accent)" aria-hidden="true"></i>' : '';
+    });
+    document.getElementById('themeVal').textContent = val;
+    if (val === 'Dark') document.documentElement.setAttribute('data-theme','dark');
+    else if (val === 'Light') document.documentElement.setAttribute('data-theme','');
+    else document.documentElement.setAttribute('data-theme', window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : '');
+  }
+
+  function setAccent(color, light, muted) {
+    document.querySelectorAll('.accent-dot').forEach(d => d.classList.remove('active'));
+    event.target.classList.add('active');
+    document.documentElement.style.setProperty('--accent', color);
+    document.documentElement.style.setProperty('--accent-light', light);
+    document.documentElement.style.setProperty('--accent-muted', muted);
+  }
+
+  function filterSettings(q) {
+    document.querySelectorAll('#screen-main .row').forEach(row => {
+      const text = row.textContent.toLowerCase();
+      row.style.display = text.includes(q.toLowerCase()) ? '' : 'none';
+    });
+  }
+
+  /* ---- OPTION LISTS ---- */
+  const categoryOptions = [
+    { label: 'Inbox', active: true, action: () => document.getElementById('catVal').textContent = 'Inbox' },
+    { label: 'Work', action: () => document.getElementById('catVal').textContent = 'Work' },
+    { label: 'Personal', action: () => document.getElementById('catVal').textContent = 'Personal' },
+    { label: 'Shopping', action: () => document.getElementById('catVal').textContent = 'Shopping' },
+    { label: 'Health', action: () => document.getElementById('catVal').textContent = 'Health' },
+  ];
+
+  const languageOptions = [
+    { label: 'English', active: true, action: () => document.getElementById('langVal').textContent = 'English' },
+    { label: 'Spanish', action: () => document.getElementById('langVal').textContent = 'Spanish' },
+    { label: 'French', action: () => document.getElementById('langVal').textContent = 'French' },
+    { label: 'German', action: () => document.getElementById('langVal').textContent = 'German' },
+    { label: 'Chinese (Simplified)', action: () => document.getElementById('langVal').textContent = 'Chinese' },
+    { label: 'Japanese', action: () => document.getElementById('langVal').textContent = 'Japanese' },
+    { label: 'Arabic', action: () => document.getElementById('langVal').textContent = 'Arabic' },
+  ];
+
+  const reminderTimeOptions = [
+    { label: '7:00 AM', action: () => document.getElementById('remTimeVal').textContent = '7:00 AM' },
+    { label: '8:00 AM', action: () => document.getElementById('remTimeVal').textContent = '8:00 AM' },
+    { label: '9:00 AM', active: true, action: () => document.getElementById('remTimeVal').textContent = '9:00 AM' },
+    { label: '10:00 AM', action: () => document.getElementById('remTimeVal').textContent = '10:00 AM' },
+    { label: '12:00 PM', action: () => document.getElementById('remTimeVal').textContent = '12:00 PM' },
+  ];
+
+  const reminderTypeOptions = [
+    { label: 'Notification', active: true, action: () => document.getElementById('remTypeVal').textContent = 'Notification' },
+    { label: 'Alarm', action: () => document.getElementById('remTypeVal').textContent = 'Alarm' },
+    { label: 'Silent', action: () => document.getElementById('remTypeVal').textContent = 'Silent' },
+  ];
+
+  const ringtoneOptions = [
+    { label: 'Chime' }, { label: 'Radar' }, { label: 'Bloom' }, { label: 'Ping' }, { label: 'None' }
+  ].map(o => ({ ...o, action: () => {} }));
+
+  const firstDayOptions = [
+    { label: 'Sunday', active: true, action: () => document.getElementById('firstDayVal').textContent = 'Sunday' },
+    { label: 'Monday', action: () => document.getElementById('firstDayVal').textContent = 'Monday' },
+    { label: 'Saturday', action: () => document.getElementById('firstDayVal').textContent = 'Saturday' },
+    { label: 'System Default', action: () => document.getElementById('firstDayVal').textContent = 'System' },
+  ];
+
+  const timeFormatOptions = [
+    { label: '12 hour', active: true, action: () => document.getElementById('timeFormatVal').textContent = '12 hour' },
+    { label: '24 hour', action: () => document.getElementById('timeFormatVal').textContent = '24 hour' },
+  ];
+
+  const dateFormatOptions = [
+    { label: 'd/m/y', active: true, action: () => document.getElementById('dateFormatVal').textContent = 'd/m/y' },
+    { label: 'm/d/y', action: () => document.getElementById('dateFormatVal').textContent = 'm/d/y' },
+    { label: 'y/m/d', action: () => document.getElementById('dateFormatVal').textContent = 'y/m/d' },
+  ];
+
+  const dueDateOptions = [
+    { label: 'Today', active: true, action: () => document.getElementById('dueDateVal').textContent = 'Today' },
+    { label: 'Tomorrow', action: () => document.getElementById('dueDateVal').textContent = 'Tomorrow' },
+    { label: 'No default', action: () => document.getElementById('dueDateVal').textContent = 'None' },
+  ];
+
+  const timezones = [
+    'UTC-12:00 (Baker Island)','UTC-11:00 (Samoa)','UTC-10:00 (Hawaii)',
+    'UTC-8:00 (Pacific Time)','UTC-7:00 (Mountain Time)','UTC-6:00 (Central Time)',
+    'UTC-5:00 (Eastern Time)','UTC-4:00 (Atlantic Time)','UTC-3:00 (Buenos Aires)',
+    'UTC+0 (London / UTC)','UTC+1:00 (Paris / Berlin)','UTC+2:00 (Cairo)',
+    'UTC+3:00 (Moscow)','UTC+4:00 (Dubai)','UTC+5:00 (Islamabad)',
+    'UTC+5:30 (Colombo / Mumbai)','UTC+6:00 (Dhaka)','UTC+7:00 (Bangkok)',
+    'UTC+8:00 (Singapore / Beijing)','UTC+9:00 (Tokyo / Seoul)',
+    'UTC+10:00 (Sydney)','UTC+12:00 (Auckland)',
+  ];
+
+  const syncDirOptions = [
+    { label: 'Two-way', active: true, action: () => document.getElementById('syncDirVal').textContent = 'Two-way' },
+    { label: 'Import only', action: () => document.getElementById('syncDirVal').textContent = 'Import' },
+    { label: 'Export only', action: () => document.getElementById('syncDirVal').textContent = 'Export' },
+  ];
+
+  const syncFreqOptions = [
+    { label: '5 minutes', action: () => document.getElementById('syncFreqVal').textContent = '5 min' },
+    { label: '15 minutes', active: true, action: () => document.getElementById('syncFreqVal').textContent = '15 min' },
+    { label: '30 minutes', action: () => document.getElementById('syncFreqVal').textContent = '30 min' },
+    { label: '1 hour', action: () => document.getElementById('syncFreqVal').textContent = '1 hr' },
+    { label: 'Manual only', action: () => document.getElementById('syncFreqVal').textContent = 'Manual' },
+  ];
+
+  const widgetStyleOptions = [
+    { label: 'Compact', active: true, action: () => document.getElementById('widgetStyleVal').textContent = 'Compact' },
+    { label: 'Expanded', action: () => document.getElementById('widgetStyleVal').textContent = 'Expanded' },
+    { label: 'Minimal', action: () => document.getElementById('widgetStyleVal').textContent = 'Minimal' },
+  ];
+
+  const widgetSizeOptions = [
+    { label: 'Small', action: () => document.getElementById('widgetSizeVal').textContent = 'Small' },
+    { label: 'Medium', active: true, action: () => document.getElementById('widgetSizeVal').textContent = 'Medium' },
+    { label: 'Large', action: () => document.getElementById('widgetSizeVal').textContent = 'Large' },
+  ];
+
+  const tasksCountOptions = [3,4,5,6,7,8].map(n => ({
+    label: n + ' tasks', active: n === 5, action: () => document.getElementById('tasksCountVal').textContent = n
+  }));
+</script>
+</body>
+</html>
