@@ -60,6 +60,7 @@ class AppBarOptionsSheet extends StatelessWidget {
                         onTaskChanged: onTaskChanged,
                         filterData: filterData,
                         toDoList: db.toDoList,
+                        settings: db.settings,
                       ),
                 ),
               );

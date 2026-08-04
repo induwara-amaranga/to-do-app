@@ -1,50 +1,51 @@
 import 'package:to_do_app/models/sorting_mode.dart';
+import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 
 class SortTasksService {
-  static List<dynamic> sortTasksByMode(
-    List<dynamic> tasksOfThisTab,
+  static List<Task> sortTasksByMode(
+    List<Task> tasksOfThisTab,
     SortingMode mode,
   ) {
-    //print("Sorting mode: $mode");
     switch (mode) {
       case SortingMode.aToz:
         tasksOfThisTab.sort((a, b) {
-          String titleA = a[0] ?? ""; // title
-          String titleB = b[0] ?? ""; // title
+          String titleA = a.name;
+          String titleB = b.name;
           return titleA.toLowerCase().compareTo(titleB.toLowerCase());
         });
         break;
       case SortingMode.zToa:
         tasksOfThisTab.sort((a, b) {
-          String titleA = a[0] ?? ""; // title
-          String titleB = b[0] ?? ""; // title
+          String titleA = a.name;
+          String titleB = b.name;
           return titleB.toLowerCase().compareTo(titleA.toLowerCase());
         });
         break;
       case SortingMode.createdDateIncreasing:
         tasksOfThisTab.sort((a, b) {
-          DateTime dateA = DateTimeUtilsHelper.parseDateTime(a[11]);
-          DateTime dateB = DateTimeUtilsHelper.parseDateTime(b[11]);
+          DateTime dateA = DateTimeUtilsHelper.parseDateTime(a.createdAt!);
+          DateTime dateB = DateTimeUtilsHelper.parseDateTime(b.createdAt!);
           return dateA.compareTo(dateB);
         });
         break;
       case SortingMode.createdDateDecreasing:
         tasksOfThisTab.sort((a, b) {
-          //print(a.toString() + b.toString());
-          DateTime dateA = DateTimeUtilsHelper.parseDateTime(a[11]);
-          DateTime dateB = DateTimeUtilsHelper.parseDateTime(b[11]);
+          DateTime dateA = DateTimeUtilsHelper.parseDateTime(a.createdAt!);
+          DateTime dateB = DateTimeUtilsHelper.parseDateTime(b.createdAt!);
           return dateB.compareTo(dateA);
         });
         break;
       case SortingMode.dueDateIncreasing:
         tasksOfThisTab.sort((a, b) {
           DateTime dateA =
-              DateTimeUtilsHelper.parseDate(a[3]) ?? DateTime(1971, 01, 01);
-          DateTime? timeA = DateTimeUtilsHelper.parseTime(a[4]);
+              DateTimeUtilsHelper.parseDate(a.dueDate) ??
+              DateTime(1971, 01, 01);
+          DateTime? timeA = DateTimeUtilsHelper.parseTime(a.dueTime!);
           DateTime dateB =
-              DateTimeUtilsHelper.parseDate(b[3]) ?? DateTime(1971, 01, 01);
-          DateTime? timeB = DateTimeUtilsHelper.parseTime(b[4]);
+              DateTimeUtilsHelper.parseDate(b.dueDate) ??
+              DateTime(1971, 01, 01);
+          DateTime? timeB = DateTimeUtilsHelper.parseTime(b.dueTime!);
           DateTime dateTimeA = DateTime(
             dateA.year,
             dateA.month,
@@ -67,11 +68,13 @@ class SortTasksService {
       case SortingMode.dueDateDecreasing:
         tasksOfThisTab.sort((a, b) {
           DateTime dateA =
-              DateTimeUtilsHelper.parseDate(a[3]) ?? DateTime(1971, 01, 01);
-          DateTime? timeA = DateTimeUtilsHelper.parseTime(a[4]);
+              DateTimeUtilsHelper.parseDate(a.dueDate) ??
+              DateTime(1971, 01, 01);
+          DateTime? timeA = DateTimeUtilsHelper.parseTime(a.dueTime!);
           DateTime dateB =
-              DateTimeUtilsHelper.parseDate(b[3]) ?? DateTime(1971, 01, 01);
-          DateTime? timeB = DateTimeUtilsHelper.parseTime(b[4]);
+              DateTimeUtilsHelper.parseDate(b.dueDate) ??
+              DateTime(1971, 01, 01);
+          DateTime? timeB = DateTimeUtilsHelper.parseTime(b.dueTime!);
           DateTime dateTimeA = DateTime(
             dateA.year,
             dateA.month,
@@ -93,8 +96,8 @@ class SortTasksService {
         break;
       case SortingMode.starredFirst:
         tasksOfThisTab.sort((a, b) {
-          bool isStarredA = a[10] == "true"; // starred
-          bool isStarredB = b[10] == "true"; // starred
+          bool isStarredA = a.isStarred;
+          bool isStarredB = b.isStarred;
           if (isStarredA == isStarredB) {
             return 0;
           } else if (isStarredA && !isStarredB) {
@@ -106,8 +109,8 @@ class SortTasksService {
         break;
       case SortingMode.nonStarredFirst:
         tasksOfThisTab.sort((a, b) {
-          bool isStarredA = a[10] == "true"; // starred
-          bool isStarredB = b[10] == "true"; // starred
+          bool isStarredA = a.isStarred;
+          bool isStarredB = b.isStarred;
           if (isStarredA == isStarredB) {
             return 0;
           } else if (!isStarredA && isStarredB) {

@@ -1,6 +1,8 @@
-import 'package:intl/intl.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:to_do_app/components/sync_tile.dart';
+import 'package:to_do_app/models/calendar_event.dart';
+import 'package:to_do_app/models/sub_task.dart';
+import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/models/types.dart';
 import 'package:to_do_app/providers/calendar_sync_provider.dart';
 import 'package:flutter/material.dart';
@@ -46,8 +48,8 @@ class TaskPage extends StatefulWidget {
 }
 
 class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
-  List<List<dynamic>> toDoList = [];
-  late Map<String, List<List<dynamic>>> hotTasks;
+  List<Task> toDoList = [];
+  late Map<String, List<Task>> hotTasks;
 
   // null = no warning; non-null = warning color to display
   Color? warningColor;
@@ -70,15 +72,15 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
 
   List<Tab> _taskCategoryTabs() {
     int pendingCount(String tabName) {
-      final List tasks;
+      final List<Task> tasks;
       if (tabName == 'All') {
         tasks = db.toDoList;
       } else if (db.categories.contains(tabName)) {
-        tasks = db.toDoList.where((t) => t[5] == tabName).toList();
+        tasks = db.toDoList.where((t) => t.category == tabName).toList();
       } else {
-        tasks = db.toDoList.where((t) => t[6] == tabName).toList();
+        tasks = db.toDoList.where((t) => t.priority == tabName).toList();
       }
-      return tasks.where((t) => !(t[1] as bool)).length;
+      return tasks.where((t) => !t.completed).length;
     }
 
     String label(String name) {
@@ -116,10 +118,10 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
     setState(() {
       for (int i = 0; i < db.toDoList.length; i++) {
         final task = db.toDoList[i];
-        String currentCategory = (task[5] ?? "None") as String;
+        String currentCategory = task.category;
         if (edittingCategories.containsKey(currentCategory)) {
-          db.toDoList[i][5] = edittingCategories[currentCategory];
-          currentCategory = db.toDoList[i][5] as String;
+          db.toDoList[i].category = edittingCategories[currentCategory]!;
+          currentCategory = db.toDoList[i].category;
         }
       }
       if (hidingCategories.contains(_selectedCategory)) {
@@ -128,59 +130,77 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
         _selectedCategory = edittingCategories[_selectedCategory]!;
       }
     });
-    db.updateDataBase();
+    // Only tasks + category metadata changed — leave the calendar boxes alone.
+    db.saveTasksAndCategories();
   }
 
   // ── Task CRUD ─────────────────────────────────────────────────────────────
 
-  void checkBoxChanged(bool? value, int index) {
+  void checkBoxChanged(bool? value, int index) async {
     if (value != null) {
-      db.toDoList[index][18] =
+      db.toDoList[index].completedAt =
           value ? DateTime.now().toUtc().toString() : "none";
     }
+    final bool spawnsRepeat =
+        value == true && db.toDoList[index].repeatType != "none";
     setState(() {
-      db.toDoList[index][1] = !db.toDoList[index][1];
-    });
-    if (value == true && db.toDoList[index][7] != "none") {
-      RepeatTask.createNextRepeatTask(context, index, db);
-    }
-    setState(() {
+      db.toDoList[index].completed = !db.toDoList[index].completed;
       toDoList = db.toDoList;
       hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
     });
-    db.updateDataBase();
+
+    // A toggle touches exactly one record — write only that one. Done before
+    // the repeat handling below because that has several early-return paths
+    // that never reach a save of their own.
+    await db.saveTaskAt(index);
+
+    if (spawnsRepeat && mounted) {
+      // Appends the next occurrence and persists the list when it does.
+      await RepeatTask.createNextRepeatTask(context, index, db);
+      if (!mounted) return;
+      setState(() {
+        toDoList = db.toDoList;
+        hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
+      });
+    }
   }
 
   void saveNewTask(Map<String, dynamic> taskDetails) async {
     final selectedRepeatType = taskDetails['repeatType'];
     final selectedRemainderAmount = taskDetails['remainderAmount'];
     final String id = uuid.v4();
-    final List<dynamic> task = [
-      taskDetails['taskName'], // 0
-      false, // 1
-      taskDetails['taskNote'], // 2
-      taskDetails['dueDate'], // 3
-      taskDetails['dueTime'], // 4
-      taskDetails['taskCategory'], // 5
-      taskDetails['taskPriority'], // 6
-      taskDetails['repeatType'], // 7
-      taskDetails['remainderAmount'], // 8
-      taskDetails['remainderType'], // 9
-      taskDetails['isStarred'], // 10
-      taskDetails['createdAt'], // 11
-      id, // 12
-      taskDetails['subTasks'] ?? [], // 13
-      "", // 14 cal id
-      "", // 15 event id
-      ["", "", ""], // 16 cal event ids
-      "manual", // 17 sync source
-      "none", // 18 completed at
-      [], // 19 notification ids
-    ];
-    setState(() {
-      db.toDoList.add(task);
-    });
-    if (selectedRemainderAmount >= 0 && selectedRepeatType != "none") {
+    final List<Map<String, dynamic>> subTaskMaps =
+        (taskDetails['subTasks'] as List<Map<String, dynamic>>?) ?? [];
+    final Task task = Task(
+      name: taskDetails['taskName'],
+      completed: false,
+      note: taskDetails['taskNote'],
+      dueDate: taskDetails['dueDate'],
+      dueTime: taskDetails['dueTime'],
+      category: taskDetails['taskCategory'],
+      priority: taskDetails['taskPriority'],
+      repeatType: taskDetails['repeatType'],
+      reminderAmount: taskDetails['remainderAmount'],
+      reminderType: taskDetails['remainderType'],
+      isStarred:
+          taskDetails['isStarred'] == "true" ||
+          taskDetails['isStarred'] == true,
+      createdAt: taskDetails['createdAt'],
+      id: id,
+      subtasks: subTaskMaps.map(SubTask.fromMap).toList(),
+      localCalendarId: "",
+      localEventId: "",
+      remoteEventIds: ["", "", ""],
+      source: "manual",
+      completedAt: "none",
+      notificationIds: [],
+    );
+    // Appends one record to the box instead of rewriting it.
+    await db.appendTask(task);
+    if (mounted) setState(() {});
+    if (selectedRemainderAmount >= 0 &&
+        selectedRepeatType != "none" &&
+        mounted) {
       await NotificationService.scheduleInitialRemainderForTask(
         id,
         context,
@@ -192,27 +212,28 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
     toDoList = db.toDoList;
     await CordinateCalendars.addUpdateTaskToCalendars(db, task);
     hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
-    db.updateDataBase();
+    // Re-save the one record: the calendar fan-out fills in remoteEventIds.
+    await db.saveTaskAt(db.toDoList.indexOf(task));
     _taskNameController.clear();
     _taskNoteController.clear();
     _remainderAmountController.clear();
   }
 
   void deleteTask(int index) async {
-    final deletedTask = List<dynamic>.from(db.toDoList[index]);
+    final deletedTask = db.toDoList[index];
 
-    for (int id in db.toDoList[index][19]) {
+    for (int id in db.toDoList[index].notificationIds) {
       await NotificationService.cancelNotification(id);
     }
-    toDoList = db.toDoList;
-    hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
     await CordinateCalendars.deleteTaskFromCalendars(db, db.toDoList[index]);
-    setState(() {
-      db.toDoList.removeAt(index);
-    });
-    db.updateDataBase();
-
+    // Deletes one record from the box rather than rewriting all of them.
+    await db.removeTaskAt(index);
     if (!mounted) return;
+    setState(() {
+      toDoList = db.toDoList;
+      hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
+    });
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text("Task deleted"),
@@ -223,7 +244,9 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
             setState(() {
               db.toDoList.insert(index, deletedTask);
             });
-            db.updateDataBase();
+            // Mid-list insert shifts every later key — Hive has no insert-at,
+            // so this one genuinely needs the full task-box rewrite.
+            db.saveToDoList();
           },
         ),
       ),
@@ -233,20 +256,23 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
   void editTask(int index, Map<String, dynamic> taskDetails) async {
     final String id = uuid.v4();
     setState(() {
-      db.toDoList[index][0] = taskDetails['taskName'];
-      db.toDoList[index][2] = taskDetails['taskNote'];
-      db.toDoList[index][3] = taskDetails['dueDate'];
-      db.toDoList[index][4] = taskDetails['dueTime'];
-      db.toDoList[index][5] = taskDetails['taskCategory'];
-      db.toDoList[index][6] = taskDetails['taskPriority'];
-      db.toDoList[index][7] = taskDetails['repeatType'];
-      db.toDoList[index][8] = taskDetails['remainderAmount'];
-      db.toDoList[index][9] = taskDetails['remainderType'];
-      db.toDoList[index][10] = taskDetails['isStarred'];
-      db.toDoList[index][11] = taskDetails['createdAt'];
-      db.toDoList[index][13] = taskDetails['subTasks'] ?? [];
+      final task = db.toDoList[index];
+      task.name = taskDetails['taskName'];
+      task.note = taskDetails['taskNote'];
+      task.dueDate = taskDetails['dueDate'];
+      task.dueTime = taskDetails['dueTime'];
+      task.category = taskDetails['taskCategory'];
+      task.priority = taskDetails['taskPriority'];
+      task.repeatType = taskDetails['repeatType'];
+      task.reminderAmount = taskDetails['remainderAmount'];
+      task.reminderType = taskDetails['remainderType'];
+      task.isStarred = taskDetails['isStarred'];
+      task.createdAt = taskDetails['createdAt'];
+      final List<Map<String, dynamic>> subTaskMaps =
+          (taskDetails['subTasks'] as List<Map<String, dynamic>>?) ?? [];
+      task.subtasks = subTaskMaps.map(SubTask.fromMap).toList();
     });
-    for (int id in db.toDoList[index][19]) {
+    for (int id in db.toDoList[index].notificationIds) {
       await NotificationService.cancelNotification(id);
     }
     if (taskDetails['remainderAmount'] >= 0 &&
@@ -262,7 +288,8 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
     toDoList = db.toDoList;
     hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
     await CordinateCalendars.addUpdateTaskToCalendars(db, db.toDoList[index]);
-    db.updateDataBase();
+    // An edit rewrites one record in place.
+    await db.saveTaskAt(index);
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -340,7 +367,10 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
     grouping = context.watch<GroupingProvider>().mode;
     sortingProvider = context.watch<SortingProvider>();
     sorting = sortingProvider.mode;
-    context.watch<CalendarSyncProvider>();
+    // Deliberately NOT watching CalendarSyncProvider here: its progress ticks
+    // fire several times per sync and would rebuild the whole page (and every
+    // tab's sort → filter → group pipeline) for a number that only the sync
+    // bar displays. The Consumer around _buildSyncBar scopes it to that bar.
     query = context.watch<SearchingProvider>().query;
 
     return Scaffold(
@@ -406,13 +436,19 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
             Expanded(
               child: TabBarView(
                 controller: _tabController,
+                // Each tab is wrapped in a Builder so its sort → filter →
+                // search → group pipeline runs when TabBarView actually builds
+                // that page, not eagerly for all ~8 tabs on every rebuild.
                 children:
                     _taskCategoryTabs().map((tab) {
-                      return _buildTasksForTab(
-                        tab.text,
-                        grouping,
-                        sorting,
-                        query,
+                      return Builder(
+                        builder:
+                            (_) => _buildTasksForTab(
+                              tab.text,
+                              grouping,
+                              sorting,
+                              query,
+                            ),
                       );
                     }).toList(),
               ),
@@ -448,6 +484,16 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
                         priorityTypes: priorityTypes,
                         remainderTypes: remainderTypes,
                         categoryTypes: db.categories,
+                        initialCategory: db.settings.defaultCategory,
+                        initialDueDate:
+                            DateTimeUtilsHelper.initialDueDateFromSetting(
+                              db.settings.defaultDueDate,
+                            ),
+                        initialRemainderAmount:
+                            int.tryParse(db.settings.reminderTime) ?? 0,
+                        initialRemainderType:
+                            db.settings.reminderTypeNormalized,
+                        firstDayOfWeek: db.settings.firstDayOfWeek,
                       ),
                 ),
             backgroundColor: Theme.of(context).colorScheme.primary,
@@ -557,11 +603,14 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
     if (key.toLowerCase() == 'today') return 'Today';
     if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(key)) {
       final dt = DateTime.tryParse(key);
-      if (dt != null) return DateFormat('MMMM d, yyyy').format(dt);
+      if (dt != null) {
+        return DateTimeUtilsHelper.displayDateFriendly(dt, db.settings);
+      }
     }
     if (RegExp(r'^\d{4}-\d{2}$').hasMatch(key)) {
       final dt = DateTime.tryParse('$key-01');
-      if (dt != null) return DateFormat('MMMM yyyy').format(dt);
+      if (dt != null)
+        return DateTimeUtilsHelper.displayMonthYear(dt, db.settings);
     }
     if (RegExp(r'^\d{4}$').hasMatch(key)) return key;
     return key.toUpperCase();
@@ -571,7 +620,8 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
     if (date == null || date.isEmpty) return 'No date';
     final dt = DateTime.tryParse('$date ${time ?? ""}');
     if (dt == null) return date;
-    return DateFormat('MMM d, yyyy h:mm a').format(dt);
+    return '${DateTimeUtilsHelper.displayDateFriendly(dt, db.settings)} '
+        '${DateTimeUtilsHelper.displayTime(dt, db.settings)}';
   }
 
   // ── Tab content builder ───────────────────────────────────────────────────
@@ -587,29 +637,29 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
     final String name =
         (tabName ?? '').replaceAll(RegExp(r'\s+\d+$'), '').trim();
 
-    List tasksOfThisTab;
+    List<Task> tasksOfThisTab;
 
     if (name == "All") {
       tasksOfThisTab = SortTasksService.sortTasksByMode(db.toDoList, sorting);
     } else if (db.categories.contains(name)) {
-      tasksOfThisTab = db.toDoList.where((t) => t[5] == name).toList();
+      tasksOfThisTab = db.toDoList.where((t) => t.category == name).toList();
     } else if (["High", "Medium", "Low"].contains(name)) {
-      tasksOfThisTab = db.toDoList.where((t) => t[6] == name).toList();
+      tasksOfThisTab = db.toDoList.where((t) => t.priority == name).toList();
     } else {
       tasksOfThisTab = [];
     }
 
     if (showCompletedTasks) {
-      tasksOfThisTab = tasksOfThisTab.where((t) => t[1]).toList();
+      tasksOfThisTab = tasksOfThisTab.where((t) => t.completed).toList();
     } else {
-      tasksOfThisTab = tasksOfThisTab.where((t) => !t[1]).toList();
+      tasksOfThisTab = tasksOfThisTab.where((t) => !t.completed).toList();
     }
 
     tasksOfThisTab = SearchTasks.searchByQuery(query, tasksOfThisTab);
     tasksOfThisTab = SortTasksService.sortTasksByMode(tasksOfThisTab, sorting);
 
-    final Map<String, List> grouped = GroupTasksService.groupTasksByMode(
-      tasksOfThisTab.cast<List<dynamic>>(),
+    final Map<String, List<Task>> grouped = GroupTasksService.groupTasksByMode(
+      tasksOfThisTab,
       grouping,
       showCompletedTasks,
     );
@@ -662,242 +712,239 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
       DateTime.now().year.toString(): true,
     };
 
+    final groupEntries = grouped.entries.toList();
+
     return RefreshIndicator(
       onRefresh: importViewOnly,
-      child: ListView(
+      // .builder, not ListView(children:), so a long "by month"/"by year"
+      // history doesn't construct every group's Card + ExpansionTile up front.
+      child: ListView.builder(
         padding: const EdgeInsets.only(bottom: 100),
-        children:
-            grouped.entries.map((entry) {
-              final groupKey = entry.key;
-              final groupTasks = entry.value;
+        itemCount: groupEntries.length,
+        itemBuilder: (context, groupIndex) {
+          final entry = groupEntries[groupIndex];
+          final groupKey = entry.key;
+          final groupTasks = entry.value;
 
-              return StatefulBuilder(
-                builder: (context, setInnerState) {
-                  final isExpanded = expandedGroups[groupKey] ?? false;
+          return StatefulBuilder(
+            builder: (context, setInnerState) {
+              final isExpanded = expandedGroups[groupKey] ?? false;
 
-                  // Collect today's calendar events once for this group
-                  final todayCalEvents =
-                      groupKey == 'today' && !showCompletedTasks
-                          ? [
-                            ...db.localCalTasks.where(_isCalEventForToday),
-                            ...db.googleCalTasks.where(_isCalEventForToday),
-                            ...db.outlookCalTasks.where(_isCalEventForToday),
-                          ]
-                          : <List<dynamic>>[];
+              // Collect today's calendar events once for this group
+              final todayCalEvents =
+                  groupKey == 'today' && !showCompletedTasks
+                      ? [
+                        ...db.localCalTasks.where(_isCalEventForToday),
+                        ...db.googleCalTasks.where(_isCalEventForToday),
+                        ...db.outlookCalTasks.where(_isCalEventForToday),
+                      ]
+                      : <CalendarEvent>[];
 
-                  return Card(
-                    // Fix: use theme surface color instead of hardcoded white
-                    color: Theme.of(context).colorScheme.surface,
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 6,
+              return Card(
+                // Fix: use theme surface color instead of hardcoded white
+                color: Theme.of(context).colorScheme.surface,
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Theme(
+                  data: Theme.of(
+                    context,
+                  ).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    childrenPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Theme(
-                      data: Theme.of(
-                        context,
-                      ).copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                        childrenPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                        initiallyExpanded: isExpanded,
-                        // Fix: display human-readable date labels
-                        title: Text(
-                          _formatGroupKey(groupKey),
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        onExpansionChanged:
-                            (val) => setInnerState(
-                              () => expandedGroups[groupKey] = val,
-                            ),
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Tasks',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                              ),
-
-                              if (groupTasks.isEmpty)
-                                const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(16.0),
-                                    child: Text(
-                                      "No tasks",
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
-                                  ),
-                                )
-                              else
-                                ReorderableListView.builder(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  itemCount: groupTasks.length,
-                                  onReorder: (oldIndex, newIndex) {
-                                    if (newIndex > oldIndex) newIndex -= 1;
-                                    final movingTaskId =
-                                        groupTasks[oldIndex][12];
-                                    final destinationTaskID =
-                                        groupTasks[newIndex][12];
-                                    final int from = db.toDoList.indexWhere(
-                                      (task) => task[12] == movingTaskId,
-                                    );
-                                    final int to = db.toDoList.indexWhere(
-                                      (task) => task[12] == destinationTaskID,
-                                    );
-                                    final task = db.toDoList.removeAt(from);
-                                    db.toDoList.insert(to, task);
-                                    db.updateDataBase();
-                                    sortingProvider.setMode(SortingMode.manual);
-                                    setState(() {});
-                                  },
-                                  itemBuilder: (context, index) {
-                                    final task = groupTasks[index];
-                                    return Padding(
-                                      key: ValueKey(
-                                        '${task[0]}_${task[12]}_${task.toString()}',
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 4,
-                                      ),
-                                      child: TaskTile(
-                                        source: task[17],
-                                        disableCompleted: () {
-                                          setState(() {
-                                            isDuringAnimation =
-                                                !isDuringAnimation;
-                                          });
-                                        },
-                                        initialSubtasks:
-                                            task[13] != null
-                                                ? (task[13] as List<dynamic>)
-                                                    .map(
-                                                      (e) => Map<
-                                                        String,
-                                                        dynamic
-                                                      >.from(e as Map),
-                                                    )
-                                                    .toList()
-                                                : [],
-                                        index: db.toDoList.indexOf(task),
-                                        isStarred: task[10] == "true",
-                                        taskName: task[0],
-                                        taskCompleted: task[1],
-                                        taskNote: task[2],
-                                        dueDate: DateTimeUtilsHelper.parseDate(
-                                          task[3],
-                                        ),
-                                        dueTime:
-                                            task[4] != "00:00"
-                                                ? DateTimeUtilsHelper.parseTime(
-                                                  task[4],
-                                                )
-                                                : null,
-                                        taskCategory: task[5],
-                                        taskPriority: task[6],
-                                        repeatType: task[7],
-                                        remainderAmount: task[8],
-                                        remainderType: task[9],
-                                        onChanged:
-                                            (index, value) =>
-                                                checkBoxChanged(value, index),
-                                        deleteFunction:
-                                            (context) => deleteTask(
-                                              db.toDoList.indexOf(task),
-                                            ),
-                                        onEdit:
-                                            (index, taskDetails) =>
-                                                editTask(index, taskDetails),
-                                        repeatTypes: repeatTypes,
-                                        priorityTypes: priorityTypes,
-                                        remainderTypes: remainderTypes,
-                                        categoryTypes: db.categories,
-                                      ),
-                                    );
-                                  },
-                                ),
-
-                              // Calendar events section — only for "today" group,
-                              // header guarded so it only shows when events exist
-                              if (todayCalEvents.isNotEmpty &&
-                                  !showCompletedTasks) ...[
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Calendar Events',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                ...todayCalEvents.map(
-                                  (e) => Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 0,
-                                      vertical: 4,
-                                    ),
-                                    child: SyncTile(task: e),
-                                  ),
-                                ),
-                              ] else if (groupKey == 'today' &&
-                                  !showCompletedTasks) ...[
-                                const SizedBox(height: 16),
-
-                                ///if(!showCompletedTasks)
-                                Text(
-                                  'Calendar Events',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                                const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(16.0),
-                                    child: Text(
-                                      "No calendar events today",
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
-                                  ),
-                                ),
-                              ],
-
-                              const SizedBox(height: 30),
-                            ],
-                          ),
-                        ],
+                    expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                    initiallyExpanded: isExpanded,
+                    // Fix: display human-readable date labels
+                    title: Text(
+                      _formatGroupKey(groupKey),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  );
-                },
+                    onExpansionChanged:
+                        (val) =>
+                            setInnerState(() => expandedGroups[groupKey] = val),
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Tasks',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+
+                          if (groupTasks.isEmpty)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Text(
+                                  "No tasks",
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ),
+                            )
+                          else
+                            ReorderableListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: groupTasks.length,
+                              onReorder: (oldIndex, newIndex) {
+                                if (newIndex > oldIndex) newIndex -= 1;
+                                final movingTaskId = groupTasks[oldIndex].id;
+                                final destinationTaskID =
+                                    groupTasks[newIndex].id;
+                                final int from = db.toDoList.indexWhere(
+                                  (task) => task.id == movingTaskId,
+                                );
+                                final int to = db.toDoList.indexWhere(
+                                  (task) => task.id == destinationTaskID,
+                                );
+                                final task = db.toDoList.removeAt(from);
+                                db.toDoList.insert(to, task);
+                                // Reorder changes every key from `to`
+                                // onward — full task-box rewrite required.
+                                db.saveToDoList();
+                                sortingProvider.setMode(SortingMode.manual);
+                                setState(() {});
+                              },
+                              itemBuilder: (context, index) {
+                                final task = groupTasks[index];
+                                return Padding(
+                                  key: ValueKey(
+                                    '${task.name}_${task.id}_${task.toString()}',
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
+                                  child: TaskTile(
+                                    source: task.source,
+                                    disableCompleted: () {
+                                      setState(() {
+                                        isDuringAnimation = !isDuringAnimation;
+                                      });
+                                    },
+                                    initialSubtasks:
+                                        task.subtasks
+                                            .map((s) => s.toMap())
+                                            .toList(),
+                                    index: db.toDoList.indexOf(task),
+                                    isStarred: task.isStarred,
+                                    taskName: task.name,
+                                    taskCompleted: task.completed,
+                                    taskNote: task.note ?? '',
+                                    dueDate: DateTimeUtilsHelper.parseDate(
+                                      task.dueDate,
+                                    ),
+                                    dueTime:
+                                        task.dueTime != "00:00"
+                                            ? DateTimeUtilsHelper.parseTime(
+                                              task.dueTime!,
+                                            )
+                                            : null,
+                                    taskCategory: task.category,
+                                    taskPriority: task.priority,
+                                    repeatType: task.repeatType!,
+                                    remainderAmount: task.reminderAmount,
+                                    remainderType: task.reminderType!,
+                                    onChanged:
+                                        (index, value) =>
+                                            checkBoxChanged(value, index),
+                                    deleteFunction:
+                                        (context) => deleteTask(
+                                          db.toDoList.indexOf(task),
+                                        ),
+                                    onEdit:
+                                        (index, taskDetails) =>
+                                            editTask(index, taskDetails),
+                                    repeatTypes: repeatTypes,
+                                    priorityTypes: priorityTypes,
+                                    remainderTypes: remainderTypes,
+                                    categoryTypes: db.categories,
+                                    playCompletionTone:
+                                        db.settings.completionTone,
+                                    playCompletionAnimation:
+                                        db.settings.completionAnimation,
+                                    settings: db.settings,
+                                  ),
+                                );
+                              },
+                            ),
+
+                          // Calendar events section — only for "today" group,
+                          // header guarded so it only shows when events exist
+                          if (todayCalEvents.isNotEmpty &&
+                              !showCompletedTasks) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              'Calendar Events',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ...todayCalEvents.map(
+                              (e) => Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 0,
+                                  vertical: 4,
+                                ),
+                                child: SyncTile(task: e, settings: db.settings),
+                              ),
+                            ),
+                          ] else if (groupKey == 'today' &&
+                              !showCompletedTasks) ...[
+                            const SizedBox(height: 16),
+
+                            ///if(!showCompletedTasks)
+                            Text(
+                              'Calendar Events',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Text(
+                                  "No calendar events today",
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ),
+                            ),
+                          ],
+
+                          const SizedBox(height: 30),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               );
-            }).toList(),
+            },
+          );
+        },
       ),
     );
   }
 
   // ── Calendar helpers ──────────────────────────────────────────────────────
 
-  bool _isCalEventForToday(List<dynamic> task) {
+  bool _isCalEventForToday(CalendarEvent task) {
     final now = DateTime.now().toUtc();
     final today = DateTime.utc(now.year, now.month, now.day);
     DateTime? storedDate = DateTimeUtilsHelper.combineDateAndTime(
-      DateTimeUtilsHelper.parseDate(task[3] as String?),
-      DateTimeUtilsHelper.parseTime(task[4] as String),
+      DateTimeUtilsHelper.parseDate(task.dueDate),
+      DateTimeUtilsHelper.parseTime(task.dueTime!),
     );
     storedDate = DateTimeUtilsHelper.utcDateTimeFromUTCvalues(storedDate);
     if (storedDate == null) return false;
@@ -908,7 +955,7 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
     );
 
     if (storedDay.isAfter(today)) return false;
-    switch ((task[7] as String?)?.toLowerCase() ?? 'none') {
+    switch (task.repeatType?.toLowerCase() ?? 'none') {
       case 'daily':
         return true;
       case 'weekly':
@@ -922,19 +969,17 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
     }
   }
 
-  Map<String, List<List<dynamic>>> getUpcomingTasksWithinHotPeriod(
-    List<List<dynamic>> toDoList,
-  ) {
+  Map<String, List<Task>> getUpcomingTasksWithinHotPeriod(List<Task> toDoList) {
     final now = DateTime.now().toUtc();
     final twoHoursLater = now.add(const Duration(hours: 2));
     final oneHourLater = now.add(const Duration(hours: 1));
 
-    final Map<String, List<List<dynamic>>> result = {'High': [], 'Medium': []};
+    final Map<String, List<Task>> result = {'High': [], 'Medium': []};
 
     for (var task in toDoList) {
-      final String priority = task[6] ?? '';
-      final String dueDateStr = task[3] ?? '';
-      final String dueTimeStr = task[4] ?? '';
+      final String priority = task.priority;
+      final String dueDateStr = task.dueDate ?? '';
+      final String dueTimeStr = task.dueTime ?? '';
 
       // Fix: remove force-unwrap — skip malformed dates instead of crashing
       DateTime? dueDate = DateTime.tryParse('$dueDateStr $dueTimeStr');
@@ -949,7 +994,7 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
         dueDate.second,
       );
 
-      if (dueDate.isAfter(now) && !(task[1] as bool)) {
+      if (dueDate.isAfter(now) && !task.completed) {
         if (priority == 'High' && dueDate.isBefore(twoHoursLater)) {
           result['High']!.add(task);
         } else if (priority == 'Medium' && dueDate.isBefore(oneHourLater)) {
@@ -971,8 +1016,8 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
   }
 
   void showPendingPriorityTasksDialog(BuildContext context) {
-    final List<List<dynamic>> highPriorityTasks = hotTasks['High'] ?? [];
-    final List<List<dynamic>> mediumPriorityTasks = hotTasks['Medium'] ?? [];
+    final List<Task> highPriorityTasks = hotTasks['High'] ?? [];
+    final List<Task> mediumPriorityTasks = hotTasks['Medium'] ?? [];
 
     if (highPriorityTasks.isEmpty && mediumPriorityTasks.isEmpty) return;
 
@@ -1057,14 +1102,14 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
                                   color: cs.error,
                                 ),
                                 title: Text(
-                                  task[0],
+                                  task.name,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                                 // Fix: formatted date instead of raw string
                                 subtitle: Text(
-                                  'Due: ${_formatDueDate(task[3] as String?, task[4] as String?)}',
+                                  'Due: ${_formatDueDate(task.dueDate, task.dueTime)}',
                                 ),
                               ),
                             ),
@@ -1109,13 +1154,13 @@ class _TaskPageState extends State<TaskPage> with TickerProviderStateMixin {
                                   color: Color(0xFFFFB300),
                                 ),
                                 title: Text(
-                                  task[0],
+                                  task.name,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                                 subtitle: Text(
-                                  'Due: ${_formatDueDate(task[3] as String?, task[4] as String?)}',
+                                  'Due: ${_formatDueDate(task.dueDate, task.dueTime)}',
                                 ),
                               ),
                             ),

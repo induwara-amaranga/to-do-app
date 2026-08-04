@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:icalendar_parser/icalendar_parser.dart';
 import 'package:flutter/material.dart';
+import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/services/notification_service.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 import 'package:uuid/uuid.dart';
 import '../data/database.dart';
+import 'package:to_do_app/utils/log.dart';
 
 class ImportFromIcsService {
   static var uuid = Uuid();
@@ -37,7 +39,7 @@ class ImportFromIcsService {
                 startDate = DateTime.tryParse(icsDate.dt);
               }
             } catch (e) {
-              print("Error parsing start date: $e");
+              logd("Error parsing start date: $e");
             }
 
             _startDate =
@@ -54,9 +56,9 @@ class ImportFromIcsService {
                           : event['dtstart'].dt,
                     )
                     : null;
-            print("event $event");
-            print("DTSTART ${event['dtstart'].dt}");
-            print("Parsed start date: $startDate");
+            logd("event $event");
+            logd("DTSTART ${event['dtstart'].dt}");
+            logd("Parsed start date: $startDate");
           } catch (_) {}
 
           return {
@@ -99,30 +101,29 @@ class ImportFromIcsService {
       //   task['dueDate'],
       // );
       final utcTime = DateTimeUtilsHelper.toUtcUsingLocal(task["dueDate"]);
-      print("utc time $utcTime  ${task["dueDate"]}");
+      logd("utc time $utcTime  ${task["dueDate"]}");
 
-      db.toDoList.add([
-        task['taskName'], // 0 - name
-        false, // 1 - completed
-        task['taskNote'], // 2 - note
-        DateTimeUtilsHelper.formatDate(utcTime), // 3 - date
-        DateTimeUtilsHelper.formatTime(utcTime), // 4 - time
-        category,
-        priority, // task['priority'], // 6 - priority
-        repeat, // task['repeat'],
-        remainderAmount, // task['remainderAmount'],
-        remainderType, // task['remainderType'], // 7–9 - repeat/remainder types
-        isStarred, // task['isIsStarred'],
-        DateTime.now().toString(), // 11 - extra
-        task['id'], // 12 - ID (if you use UUIDs)
-        [], // 13 - subtasks
-        "",
-        "",
-        "",
-        "ICS",
-        "none", //18 completed at
-        [],
-      ]);
+      db.toDoList.add(
+        Task(
+          name: task['taskName'],
+          completed: false,
+          note: task['taskNote'],
+          dueDate: DateTimeUtilsHelper.formatDate(utcTime),
+          dueTime: DateTimeUtilsHelper.formatTime(utcTime),
+          category: category,
+          priority: priority,
+          repeatType: repeat,
+          reminderAmount: remainderAmount,
+          reminderType: remainderType,
+          isStarred: isStarred,
+          createdAt: DateTime.now().toString(),
+          id: task['id'],
+          subtasks: [],
+          source: "ICS",
+          completedAt: "none",
+          notificationIds: [],
+        ),
+      );
       await NotificationService.scheduleInitialRemainderForTask(
         task['id'],
         context,

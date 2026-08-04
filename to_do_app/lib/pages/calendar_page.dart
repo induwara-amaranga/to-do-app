@@ -6,6 +6,9 @@ import 'package:to_do_app/components/sync_tile.dart';
 import 'package:to_do_app/components/task_page_bottom_nav_bar.dart';
 import 'package:to_do_app/components/task_tile.dart';
 import 'package:to_do_app/data/database.dart';
+import 'package:to_do_app/models/calendar_event.dart';
+import 'package:to_do_app/models/sub_task.dart';
+import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/models/types.dart';
 import 'package:to_do_app/services/local_calendar_service.dart';
 import 'package:to_do_app/services/notification_service.dart';
@@ -26,9 +29,9 @@ class _CalendarPageState extends State<CalendarPage> {
   DateTime firstDay = DateTime.utc(2000, 01, 01);
   DateTime lastDay = DateTime.utc(2100, 12, 31);
   DateTime selectedDay = DateTime.now();
-  List<List<dynamic>> toDoList = [];
-  List<List<dynamic>> tasksForSelectedDay = [];
-  List<List<dynamic>> calTasksForSelectedDay = [];
+  List<Task> toDoList = [];
+  List<Task> tasksForSelectedDay = [];
+  List<CalendarEvent> calTasksForSelectedDay = [];
   late final ToDoDataBase db;
 
   bool _isStarred = false;
@@ -38,19 +41,19 @@ class _CalendarPageState extends State<CalendarPage> {
 
     if (value != null) {
       if (value) {
-        db.toDoList[index][18] = DateTime.now().toUtc().toString();
+        db.toDoList[index].completedAt = DateTime.now().toUtc().toString();
       } else {
-        db.toDoList[index][18] = "none";
+        db.toDoList[index].completedAt = "none";
       }
     }
 
     // Step 1: toggle checkbox
     setState(() {
-      toDoList[index][1] = !toDoList[index][1];
+      toDoList[index].completed = !toDoList[index].completed;
     });
 
     // Step 2: handle repeating logic OUTSIDE setState
-    if (value == true && toDoList[index][7] != "none") {
+    if (value == true && toDoList[index].repeatType != "none") {
       RepeatTask.createNextRepeatTask(context, index, db);
     }
 
@@ -67,30 +70,33 @@ class _CalendarPageState extends State<CalendarPage> {
     final selectedRemainderType = taskDetails['repeatType']; //7
     final selectedRemainderAmount = taskDetails['remainderAmount'];
     String id = uuid.v4();
+    final List<Map<String, dynamic>> subTaskMaps =
+        (taskDetails['subTasks'] as List<Map<String, dynamic>>?) ?? [];
+    final Task task = Task(
+      name: taskDetails['taskName'],
+      completed: false,
+      note: taskDetails['taskNote'],
+      dueDate: taskDetails['dueDate'],
+      dueTime: taskDetails['dueTime'],
+      category: taskDetails['taskCategory'],
+      priority: taskDetails['taskPriority'],
+      repeatType: taskDetails['repeatType'],
+      reminderAmount: taskDetails['remainderAmount'],
+      reminderType: taskDetails['remainderType'],
+      isStarred: taskDetails['isStarred'],
+      createdAt: taskDetails['createdAt'],
+      id: id,
+      subtasks: subTaskMaps.map(SubTask.fromMap).toList(),
+      localCalendarId: "",
+      localEventId: "",
+      remoteEventIds: ["", "", ""],
+      source: "manual",
+      completedAt: "none",
+      notificationIds: [],
+    );
     setState(() {
       print("adding tasks $taskDetails");
-      db.toDoList.add([
-        taskDetails['taskName'], //0
-        false, //1
-        taskDetails['taskNote'], //2
-        taskDetails['dueDate'], //3
-        taskDetails['dueTime'], //4
-        taskDetails['taskCategory'], //5
-        taskDetails['taskPriority'], //6
-        taskDetails['repeatType'], //7
-        taskDetails['remainderAmount'], //8
-        taskDetails['remainderType'], //9
-        taskDetails['isStarred'], //10
-        taskDetails['createdAt'], //11
-        id, //12
-        taskDetails['subTasks'] ?? [], //13
-        "", //14 cal id
-        "", //15 event id
-        "", //16 local cal event id
-        "manual", //17 is synced
-        "none", //18 completed at
-        [], //19 notification ids
-      ]);
+      db.toDoList.add(task);
     });
 
     // ⏰ Schedule notification if remainder is set
@@ -106,46 +112,19 @@ class _CalendarPageState extends State<CalendarPage> {
     print("A F T E R   N E W   T A S K-----------------------------");
     print(db.toDoList);
     toDoList = db.toDoList;
-    // categorizedToDOTasks =
-    //     _taskCategoryTabs().map((tab) {
-    //       return _buildTasksForTab(tab.text, grouping, sorting, query);
-    //     }).toList();
-    //hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
     db.updateDataBase();
     if (db.syncToCalendars["local"] != "none") {
       print("🔄");
-      LocalCalendarService.addEvent(db.syncToCalendars["local"], [
-        taskDetails['taskName'], //0
-        false, //1
-        taskDetails['taskNote'], //2
-        taskDetails['dueDate'], //3
-        taskDetails['dueTime'], //4
-        taskDetails['taskCategory'], //5
-        taskDetails['taskPriority'], //6
-        taskDetails['repeatType'], //7
-        taskDetails['remainderAmount'], //8
-        taskDetails['remainderType'], //9
-        taskDetails['isStarred'], //10
-        taskDetails['createdAt'], //11
-        id, //12
-        taskDetails['subTasks'] ?? [], //13
-        "", //14 cal id
-        "", //15
-        "", //16
-      ]);
+      LocalCalendarService.addEvent(db.syncToCalendars["local"], task);
     }
-    //print(db.toDoList);
-    //_taskNameController.clear();
-    //_taskNoteController.clear();
-    //_remainderAmountController.clear();
   }
 
   void deleteTask(int index) async {
     await LocalCalendarService.deleteEvent(
-      db.toDoList[index][16],
+      db.toDoList[index].remoteEventIds[0],
       db.syncToCalendars["local"],
     );
-    for (int id in db.toDoList[index][19]) {
+    for (int id in db.toDoList[index].notificationIds) {
       print("calling to id $id for edited task");
       await NotificationService.cancelNotification(id);
     }
@@ -153,37 +132,34 @@ class _CalendarPageState extends State<CalendarPage> {
       db.toDoList.removeAt(index);
     });
     toDoList = db.toDoList;
-    // categorizedToDOTasks =
-    //     _taskCategoryTabs().map((tab) {
-    //       return _buildTasksForTab(tab.text, grouping, sorting, query);
-    //     }).toList();
-    //hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
     db.updateDataBase();
-    if (db.syncToCalendars["local"] != "none" && db.toDoList[index][16] != "") {
+    if (db.syncToCalendars["local"] != "none" &&
+        db.toDoList[index].remoteEventIds[0] != "") {
       print("🔄");
     }
   }
 
   void editTask(int index, Map<String, dynamic> taskDetails) async {
     String id = uuid.v4();
-    String oldId = db.toDoList[index][12];
     setState(() {
-      db.toDoList[index][0] = taskDetails['taskName'];
-      db.toDoList[index][2] = taskDetails['taskNote'];
-      db.toDoList[index][3] = taskDetails['dueDate'];
-      db.toDoList[index][4] = taskDetails['dueTime'];
-      db.toDoList[index][5] = taskDetails['taskCategory'];
-      db.toDoList[index][6] = taskDetails['taskPriority'];
-      db.toDoList[index][7] = taskDetails['repeatType'];
-      db.toDoList[index][8] = taskDetails['remainderAmount'];
-      db.toDoList[index][9] = taskDetails['remainderType'];
-      db.toDoList[index][10] = taskDetails['isStarred'];
-      db.toDoList[index][11] = taskDetails['createdAt'];
-      //db.toDoList[index][12] = id;
-      db.toDoList[index][13] = taskDetails['subTasks'] ?? [];
+      final task = db.toDoList[index];
+      task.name = taskDetails['taskName'];
+      task.note = taskDetails['taskNote'];
+      task.dueDate = taskDetails['dueDate'];
+      task.dueTime = taskDetails['dueTime'];
+      task.category = taskDetails['taskCategory'];
+      task.priority = taskDetails['taskPriority'];
+      task.repeatType = taskDetails['repeatType'];
+      task.reminderAmount = taskDetails['remainderAmount'];
+      task.reminderType = taskDetails['remainderType'];
+      task.isStarred = taskDetails['isStarred'];
+      task.createdAt = taskDetails['createdAt'];
+      final List<Map<String, dynamic>> subTaskMaps =
+          (taskDetails['subTasks'] as List<Map<String, dynamic>>?) ?? [];
+      task.subtasks = subTaskMaps.map(SubTask.fromMap).toList();
     });
 
-    for (int id in db.toDoList[index][19]) {
+    for (int id in db.toDoList[index].notificationIds) {
       print("calling to id $id for edited task");
       await NotificationService.cancelNotification(id);
     }
@@ -240,60 +216,51 @@ class _CalendarPageState extends State<CalendarPage> {
     //hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
     if (db.syncToCalendars["local"] != "none") {
       print("🔄");
-      LocalCalendarService.addEvent(db.syncToCalendars["local"], [
-        taskDetails['taskName'], //0
-        false, //1
-        taskDetails['taskNote'], //2
-        taskDetails['dueDate'], //3
-        taskDetails['dueTime'], //4
-        taskDetails['taskCategory'], //5
-        taskDetails['taskPriority'], //6
-        taskDetails['repeatType'], //7
-        taskDetails['remainderAmount'], //8
-        taskDetails['remainderType'], //9
-        taskDetails['isStarred'], //10
-        taskDetails['createdAt'], //11
-        db.toDoList[index][12], //12
-        taskDetails['subTasks'] ?? [], //13
-        db.toDoList[index][14], //14 cal id
-        db.toDoList[index][15], //15
-        db.toDoList[index][16], //16
-      ]);
+      LocalCalendarService.addEvent(
+        db.syncToCalendars["local"],
+        db.toDoList[index],
+      );
     }
     db.updateDataBase();
   }
 
-  List<List<dynamic>> _getCalTasksForDay(DateTime day) {
+  List<CalendarEvent> _getCalTasksForDay(DateTime day) {
     return [
-      ...db.localCalTasks.where((t) => _isTaskOnDay(t, day)),
-      ...db.googleCalTasks.where((t) => _isTaskOnDay(t, day)),
-      ...db.outlookCalTasks.where((t) => _isTaskOnDay(t, day)),
+      ...db.localCalTasks.where((t) => _isCalEventOnDay(t, day)),
+      ...db.googleCalTasks.where((t) => _isCalEventOnDay(t, day)),
+      ...db.outlookCalTasks.where((t) => _isCalEventOnDay(t, day)),
     ];
   }
 
-  bool _isTaskOnDay(List<dynamic> task, DateTime day) {
-    if (task[3] == null || task[3] == "0000-00-00") return false;
+  bool _isOnDay({
+    required String? dueDate,
+    required String? dueTime,
+    required bool completed,
+    required String? repeatType,
+    required DateTime day,
+  }) {
+    if (dueDate == null || dueDate == "0000-00-00") return false;
 
     final DateTime dueLocal = DateTimeUtilsHelper.toLocalUsingTz(
-      DateTimeUtilsHelper.combineDateAndTimeFromStrings(task[3], task[4]),
+      DateTimeUtilsHelper.combineDateAndTimeFromStrings(
+        dueDate,
+        dueTime ?? "00:00",
+      ),
     );
 
     final sel = DateTime(day.year, day.month, day.day);
     final due = DateTime(dueLocal.year, dueLocal.month, dueLocal.day);
-    print(
-      "----------------selected: $sel, due: $due, task: ${task[0]}, repeat: ${task[7]}, source: ${task[17]}",
-    );
 
     // Always show on the exact due date
     if (sel == due) return true;
 
     // Completed tasks and non-repeating tasks only show on their due date
-    if (task[1] == true || task[7] == null || task[7] == "none") return false;
+    if (completed || repeatType == null || repeatType == "none") return false;
 
     // Repeating incomplete tasks: selected day must be after the due date
     if (sel.isBefore(due)) return false;
 
-    switch (task[7]) {
+    switch (repeatType) {
       case 'daily':
         return true;
       case 'weekly':
@@ -306,6 +273,22 @@ class _CalendarPageState extends State<CalendarPage> {
         return false;
     }
   }
+
+  bool _isTaskOnDay(Task task, DateTime day) => _isOnDay(
+    dueDate: task.dueDate,
+    dueTime: task.dueTime,
+    completed: task.completed,
+    repeatType: task.repeatType,
+    day: day,
+  );
+
+  bool _isCalEventOnDay(CalendarEvent task, DateTime day) => _isOnDay(
+    dueDate: task.dueDate,
+    dueTime: task.dueTime,
+    completed: task.completed,
+    repeatType: task.repeatType,
+    day: day,
+  );
 
   @override
   void initState() {
@@ -350,6 +333,10 @@ class _CalendarPageState extends State<CalendarPage> {
               ],
             ),
             child: TableCalendar(
+              startingDayOfWeek:
+                  DateTimeUtilsHelper.startingDayOfWeekFromSetting(
+                    db.settings.firstDayOfWeek,
+                  ),
               headerStyle: HeaderStyle(
                 titleCentered: true,
                 //formatButtonVisible: false,
@@ -432,36 +419,30 @@ class _CalendarPageState extends State<CalendarPage> {
                       horizontal: 8,
                     ),
                     child: TaskTile(
-                      source: task[17],
+                      source: task.source,
                       disableCompleted: () {
                         setState(() {});
                       },
                       key: ValueKey(
-                        '${task[0]}_${task[12]}_${task.toString()}',
+                        '${task.name}_${task.id}_${task.toString()}',
                       ),
                       initialSubtasks:
-                          task[13] != null
-                              ? (task[13] as List<dynamic>)
-                                  .map(
-                                    (e) => Map<String, dynamic>.from(e as Map),
-                                  )
-                                  .toList()
-                              : [],
+                          task.subtasks.map((s) => s.toMap()).toList(),
                       index: toDoList.indexOf(task),
-                      isStarred: task[10] == "true",
-                      taskName: task[0],
-                      taskCompleted: task[1],
-                      taskNote: task[2],
-                      dueDate: DateTimeUtilsHelper.parseDate(task[3]),
+                      isStarred: task.isStarred,
+                      taskName: task.name,
+                      taskCompleted: task.completed,
+                      taskNote: task.note ?? '',
+                      dueDate: DateTimeUtilsHelper.parseDate(task.dueDate),
                       dueTime:
-                          task[4] != "00:00"
-                              ? DateTimeUtilsHelper.parseTime(task[4])
+                          task.dueTime != "00:00"
+                              ? DateTimeUtilsHelper.parseTime(task.dueTime!)
                               : null,
-                      taskCategory: task[5],
-                      taskPriority: task[6],
-                      repeatType: task[7],
-                      remainderAmount: task[8],
-                      remainderType: task[9],
+                      taskCategory: task.category,
+                      taskPriority: task.priority,
+                      repeatType: task.repeatType!,
+                      remainderAmount: task.reminderAmount,
+                      remainderType: task.reminderType!,
                       onChanged:
                           (index, value) => checkBoxChanged(value, index),
                       deleteFunction:
@@ -472,6 +453,9 @@ class _CalendarPageState extends State<CalendarPage> {
                       priorityTypes: priorityTypes,
                       remainderTypes: remainderTypes,
                       categoryTypes: widget.db.categories,
+                      playCompletionTone: db.settings.completionTone,
+                      playCompletionAnimation: db.settings.completionAnimation,
+                      settings: db.settings,
                     ),
                   );
                 }),
@@ -495,7 +479,7 @@ class _CalendarPageState extends State<CalendarPage> {
                       horizontal: 8,
                       vertical: 4,
                     ),
-                    child: SyncTile(task: task),
+                    child: SyncTile(task: task, settings: db.settings),
                   ),
                 ),
               ],
@@ -548,6 +532,15 @@ class _CalendarPageState extends State<CalendarPage> {
                       priorityTypes: priorityTypes,
                       remainderTypes: remainderTypes,
                       categoryTypes: db.categories,
+                      initialCategory: db.settings.defaultCategory,
+                      initialDueDate:
+                          DateTimeUtilsHelper.initialDueDateFromSetting(
+                            db.settings.defaultDueDate,
+                          ),
+                      initialRemainderAmount:
+                          int.tryParse(db.settings.reminderTime) ?? 0,
+                      initialRemainderType: db.settings.reminderTypeNormalized,
+                      firstDayOfWeek: db.settings.firstDayOfWeek,
                     ),
               ),
           child: const Icon(Icons.add_rounded),

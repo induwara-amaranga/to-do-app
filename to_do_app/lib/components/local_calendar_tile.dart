@@ -23,25 +23,26 @@ class _LocalCalendarTileState extends State<LocalCalendarTile> {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Calendar Access Blocked'),
-        content: const Text(
-          'Calendar access was denied. Please enable it in Settings to sync your tasks.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Not Now'),
+      builder:
+          (_) => AlertDialog(
+            title: const Text('Calendar Access Blocked'),
+            content: const Text(
+              'Calendar access was denied. Please enable it in Settings to sync your tasks.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Not Now'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  openAppSettings();
+                },
+                child: const Text('Open Settings'),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              openAppSettings();
-            },
-            child: const Text('Open Settings'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -61,22 +62,23 @@ class _LocalCalendarTileState extends State<LocalCalendarTile> {
     final bool accepted =
         await showDialog<bool>(
           context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Calendar Access Required'),
-            content: const Text(
-              'To sync your tasks with your device calendar, the app needs calendar access.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Not Now'),
+          builder:
+              (_) => AlertDialog(
+                title: const Text('Calendar Access Required'),
+                content: const Text(
+                  'To sync your tasks with your device calendar, the app needs calendar access.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Not Now'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Grant Access'),
+                  ),
+                ],
               ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Grant Access'),
-              ),
-            ],
-          ),
         ) ??
         false;
 
@@ -119,7 +121,9 @@ class _LocalCalendarTileState extends State<LocalCalendarTile> {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => LocalCalendarSyncPage(calendars: calendars, db: widget.db),
+            builder:
+                (_) =>
+                    LocalCalendarSyncPage(calendars: calendars, db: widget.db),
           ),
         );
         setState(() {});
@@ -149,7 +153,9 @@ class _LocalCalendarTileState extends State<LocalCalendarTile> {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => LocalCalendarSyncPage(calendars: calendars, db: widget.db),
+            builder:
+                (_) =>
+                    LocalCalendarSyncPage(calendars: calendars, db: widget.db),
           ),
         );
         setState(() {});
@@ -226,9 +232,10 @@ class _LocalCalendarTileState extends State<LocalCalendarTile> {
                         isSyncActive ? "Connected" : "Not connected",
                         style: TextStyle(
                           fontSize: 12,
-                          color: isSyncActive
-                              ? _brandColor
-                              : onSurface.withValues(alpha: 0.5),
+                          color:
+                              isSyncActive
+                                  ? _brandColor
+                                  : onSurface.withValues(alpha: 0.5),
                         ),
                       ),
                     ],
@@ -253,26 +260,28 @@ class _LocalCalendarTileState extends State<LocalCalendarTile> {
           SwitchListTile(
             title: const Text("Enable sync"),
             value: isSyncActive,
-            onChanged: _isLoading
-                ? null
-                : (value) async {
-                    if (value) {
-                      await _handleEnableSync();
-                    } else {
-                      await _disableSync();
-                    }
-                  },
+            onChanged:
+                _isLoading
+                    ? null
+                    : (value) async {
+                      if (value) {
+                        await _handleEnableSync();
+                      } else {
+                        await _disableSync();
+                      }
+                    },
             activeColor: Theme.of(context).colorScheme.primary,
-            secondary: _isLoading
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  )
-                : null,
+            secondary:
+                _isLoading
+                    ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    )
+                    : null,
           ),
           // Manage footer (only when active)
           if (isSyncActive) ...[

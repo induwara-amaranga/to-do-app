@@ -1,12 +1,18 @@
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:to_do_app/models/calendar_event.dart';
+import 'package:to_do_app/models/settings.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SyncTile extends StatelessWidget {
-  final List<dynamic> task;
-  const SyncTile({super.key, required this.task});
+  final CalendarEvent task;
+  final AppSettings settings;
+  const SyncTile({
+    super.key,
+    required this.task,
+    this.settings = const AppSettings(),
+  });
 
   static const _googleColor = Color(0xFF4285F4);
   static const _outlookColor = Color(0xFF0078D4);
@@ -49,14 +55,14 @@ class SyncTile extends StatelessWidget {
         time,
       );
       final localDateTime = utcDateTime.toLocal();
-      return DateFormat('h:mm a').format(localDateTime);
+      return DateTimeUtilsHelper.displayTime(localDateTime, settings);
     } catch (_) {
       return time;
     }
   }
 
   Future<void> _openCalendarEvent() async {
-    final String eventId = task[15] ?? '';
+    final String eventId = task.eventId;
     if (eventId.isNotEmpty) {
       final intent = AndroidIntent(
         action: 'android.intent.action.VIEW',
@@ -72,9 +78,9 @@ class SyncTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final String name = task[0] ?? '';
-    final String source = task[17] ?? '';
-    final String timeStr = _formatTime(task[3] as String?, task[4] as String?);
+    final String name = task.name;
+    final String source = task.source;
+    final String timeStr = _formatTime(task.dueDate, task.dueTime);
     final Color accent = _accentColor(source);
 
     return Material(

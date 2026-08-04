@@ -25,8 +25,10 @@ class _EditSubTaskDialogState extends State<EditSubTaskDialog> {
     _nameController = TextEditingController(text: widget.subtask["name"]);
     final rawDate = widget.subtask["dueDate"];
     final rawTime = widget.subtask["dueTime"];
-    _subDueDate = rawDate is String ? DateTime.tryParse(rawDate) : rawDate as DateTime?;
-    _subDueTime = rawTime is String ? DateTime.tryParse(rawTime) : rawTime as DateTime?;
+    _subDueDate =
+        rawDate is String ? DateTime.tryParse(rawDate) : rawDate as DateTime?;
+    _subDueTime =
+        rawTime is String ? DateTime.tryParse(rawTime) : rawTime as DateTime?;
   }
 
   @override

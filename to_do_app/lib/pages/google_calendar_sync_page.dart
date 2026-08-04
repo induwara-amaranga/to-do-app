@@ -100,11 +100,7 @@ class _LocalCalendarSyncPageState extends State<GoogleCalendarSyncPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Sync google Calendars"), actions: [
-        
-          
-        ],
-      ),
+      appBar: AppBar(title: const Text("Sync google Calendars"), actions: []),
       body: Column(
         children: [
           const Divider(),

@@ -29,18 +29,30 @@ import 'package:to_do_app/providers/searching_provider.dart';
 import 'services/notification_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:to_do_app/config/app_config.dart';
+import 'package:to_do_app/utils/date_time_utils.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final ToDoDataBase db = ToDoDataBase();
 String? path;
 
 Future<void> initLocalTimeZone() async {
+  if (db.settings.timeZoneManuallySet) {
+    final manual = DateTimeUtilsHelper.locationFromTimeZoneLabel(
+      db.settings.timeZoneLabel,
+    );
+    if (manual != null) {
+      tz.setLocalLocation(manual);
+      if (kDebugMode) print("Using manually-set timezone: ${tz.local.name}");
+      return;
+    }
+    // Unrecognized label (e.g. corrupted data) — fall through to auto-detect.
+  }
   try {
     final tzInfo = await FlutterTimezone.getLocalTimezone();
     final tzName = tzInfo.identifier;
     final location = tz.getLocation(tzName);
     tz.setLocalLocation(location);
-    db.settings["timeZone"] = tzName;
+    db.settings = db.settings.copyWith(timeZoneLabel: tzName);
     db.saveSettings();
     if (kDebugMode) print("Local timezone set: ${tz.local.name}");
   } catch (e) {
@@ -90,6 +102,12 @@ void main() async {
   }
 
   await initLocalTimeZone();
+
+  try {
+    await NotificationService.scheduleDailySummaryNotifications(db);
+  } catch (e) {
+    if (kDebugMode) print("Daily summary notification scheduling error: $e");
+  }
 
   runApp(
     MultiProvider(

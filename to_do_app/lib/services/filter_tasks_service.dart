@@ -1,44 +1,31 @@
+import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/utils/date_time_utils.dart'; // lib == to_do_app
-//import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 class FilterTasksService {
-  static List<List<dynamic>> filterTasksByCategory(
-    List<List<dynamic>> toDoList,
+  static List<Task> filterTasksByCategory(
+    List<Task> toDoList,
     Map<String, dynamic>? filterData,
   ) {
-    List<List<dynamic>> filteredTasks =
+    List<Task> filteredTasks =
         toDoList.where((task) {
-          //return true;
           DateTime now = DateTime.now().toUtc();
 
           DateTime? taskDate = DateTimeUtilsHelper.utcDateTimeFromUTCvalues(
             DateTimeUtilsHelper.combineDateAndTime(
-              DateTimeUtilsHelper.parseDate(task[3]),
-              DateTimeUtilsHelper.parseTime(task[4]),
+              DateTimeUtilsHelper.parseDate(task.dueDate),
+              DateTimeUtilsHelper.parseTime(task.dueTime!),
             ),
           );
-          // if (task[3] != null && task[3] != "0000-00-00") {
-          //   try {
-          //     taskDate = DateFormat('yyyy-MM-dd').parse(task[3]!);
-          //   } catch (e) {
-          //     taskDate = DateTime(1970, 01, 01);
-          //   }
-          // } else {
-          //   taskDate = DateTime(1970, 01, 01);
-          // }
 
-          bool isCategoryMatched(
-            List<dynamic> task,
-            Map<String, dynamic>? filterData,
-          ) {
-            if ((filterData!["categories"].contains(task[5])) ||
-                (filterData!["categories"].contains(task[6])) ||
+          bool isCategoryMatched(Task task, Map<String, dynamic>? filterData) {
+            if ((filterData!["categories"].contains(task.category)) ||
+                (filterData!["categories"].contains(task.priority)) ||
                 (filterData!["categories"].isEmpty) ||
                 (filterData!["categories"].contains("Completed") &&
-                    task[1] == true) ||
+                    task.completed == true) ||
                 (filterData!["categories"].contains("Pending") &&
-                    (task[1] == false) &&
+                    (task.completed == false) &&
                     (taskDate.isAfter(now) ||
                         (taskDate.isAtSameMomentAs(
                               DateTime(now.year, now.month, now.day),
@@ -48,7 +35,7 @@ class FilterTasksService {
                                     (taskDate.hour == now.hour &&
                                         taskDate.minute > now.minute)))))) ||
                 (filterData!["categories"].contains("Missed") &&
-                    (task[1] == false) &&
+                    (task.completed == false) &&
                     (taskDate.isBefore(now) ||
                         (taskDate.isAtSameMomentAs(
                               DateTime(now.year, now.month, now.day),
@@ -63,13 +50,6 @@ class FilterTasksService {
             }
           }
 
-          // print(
-          //   "++++++++" +
-          //       task[0] +
-          //       " : " +
-          //       isCategoryMatched(task, widget.filterData).toString(),
-          // );
-
           if ((filterData!["selectedDueDates"].isEmpty)) {
             if (isCategoryMatched(task, filterData)) {
               return true;
@@ -79,7 +59,6 @@ class FilterTasksService {
           } else if (!isSameDay(taskDate, DateTime(1970, 01, 01))) {
             for (DateTime date in filterData!["selectedDueDates"]) {
               date = date.toUtc();
-              //print("filter date:$date  task date:" + taskDate.toString());
               if ((filterData!["selectedFilter"] == "Selected_dates")) {
                 // Ignore invalid dates for dueDate filter
                 if (!isSameDay(
@@ -107,7 +86,6 @@ class FilterTasksService {
 
               return true;
             }
-            //return false;
           }
 
           return false;

@@ -1,13 +1,12 @@
+import 'package:to_do_app/models/task.dart';
+
 class SearchTasks {
-  static List<dynamic> searchByQuery(
-    String searchQuery,
-    List<dynamic> tasksList,
-  ) {
+  static List<Task> searchByQuery(String searchQuery, List<Task> tasksList) {
     if (searchQuery.isNotEmpty) {
       tasksList =
           tasksList.where((task) {
-            final name = (task[0] ?? "").toString().toLowerCase();
-            final note = (task[2] ?? "").toString().toLowerCase();
+            final name = task.name.toLowerCase();
+            final note = (task.note ?? "").toLowerCase();
             return name.contains(searchQuery) || note.contains(searchQuery);
           }).toList();
     }

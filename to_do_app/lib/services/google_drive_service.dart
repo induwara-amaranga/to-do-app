@@ -5,6 +5,7 @@ import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:to_do_app/services/google_sign.dart';
+import 'package:to_do_app/utils/log.dart';
 
 class GoogleDriveService {
   // This is where Hive stores boxes by default
@@ -26,12 +27,12 @@ class GoogleDriveService {
   static final storage = FlutterSecureStorage();
 
   // static Future<bool> restoreLastSession() async {
-  //   print("🔄 Trying to restore previous Google session...");
+  //   logd("🔄 Trying to restore previous Google session...");
 
   //   final auth = await storage.read(key: 'drive_auth_token');
 
   //   if (auth == null) {
-  //     print("❌ No stored token. User must sign in once.");
+  //     logd("❌ No stored token. User must sign in once.");
   //     return false;
   //   }
 
@@ -45,10 +46,10 @@ class GoogleDriveService {
   //     // test token
   //     //await _driveApi!.files.list(pageSize: 1);
 
-  //     print("✅ Restored Drive session without sign-in!");
+  //     logd("✅ Restored Drive session without sign-in!");
   //     return true;
   //   } catch (e) {
-  //     print("❌ Saved token expired: $e");
+  //     logd("❌ Saved token expired: $e");
   //     return false;
   //   }
   // }
@@ -57,7 +58,7 @@ class GoogleDriveService {
   ///  SIGN IN & INIT DRIVE API
   /// --------------------------
   // static Future<GoogleSignInAccount?> initializeSignIn() async {
-  //   print("initializing google sign in...");
+  //   logd("initializing google sign in...");
   //   // 1️⃣ Initialize the singleton instance with your OAuth client IDs
   //   await GoogleSignIn.instance.initialize(
   //     clientId: androidClientId,
@@ -65,13 +66,13 @@ class GoogleDriveService {
   //   );
 
   //   // 2️⃣ Attempt SILENT sign-in first
-  //   print("Trying silent sign-in...");
+  //   logd("Trying silent sign-in...");
   //   account = await GoogleSignIn.instance.attemptLightweightAuthentication();
 
   //   if (account != null) {
-  //     print("✅ Silent sign-in success: ${account!.email}");
+  //     logd("✅ Silent sign-in success: ${account!.email}");
   //   } else {
-  //     print("❌ Silent sign-in failed,asking user to sign in...");
+  //     logd("❌ Silent sign-in failed,asking user to sign in...");
   //     // 3️⃣ Fallback to UI sign-in
   //     account = await GoogleSignIn.instance.authenticate(
   //       scopeHint: ['https://www.googleapis.com/auth/calendar'],
@@ -89,25 +90,25 @@ class GoogleDriveService {
   //       // drive.DriveApi.driveScope,   // use this only if you need full Drive access
   //     ], promptIfNecessary: true);
 
-  //     print('✅ Signed in as: ${account!.email}');
-  //     print('🔑 Access token: ${headers?['Authorization']}');
+  //     logd('✅ Signed in as: ${account!.email}');
+  //     logd('🔑 Access token: ${headers?['Authorization']}');
   //     await storage.write(
   //       key: 'drive_auth_token',
   //       value: headers?['Authorization'],
   //     );
   //     if (headers == null) {
-  //       print('User not signed in');
+  //       logd('User not signed in');
   //       return null;
   //     }
   //     final client = _GoogleAuthClient(headers);
 
   //     _driveApi = drive.DriveApi(client);
   //     //final _driveApi = await getCalendarApi(headers);
-  //     print('✅ Google Calendar API initialized');
+  //     logd('✅ Google Calendar API initialized');
   //     //_calendarApi = calendarApi;
   //     return account;
   //   } else {
-  //     print('❌ Sign-in failed');
+  //     logd('❌ Sign-in failed');
   //     return null;
   //   }
   // }
@@ -126,13 +127,13 @@ class GoogleDriveService {
     );
 
     if (result.files != null && result.files!.isNotEmpty) {
-      print(
+      logd(
         "File found: ${result.files!.first.name} (ID: ${result.files!.first.id})",
       );
 
       return result.files!.first.id; // Return the ID of the fi
     }
-    print("File not found: $fileName");
+    logd("File not found: $fileName");
     return null; // File not found
   }
 
@@ -147,7 +148,7 @@ class GoogleDriveService {
     try {
       // 1️⃣ Check if file already exists in the folder
       final existingFile = await getFileId(folderId);
-      print("--------------existing file id = $existingFile");
+      logd("--------------existing file id = $existingFile");
 
       final media = drive.Media(file.openRead(), file.lengthSync());
 
@@ -159,7 +160,7 @@ class GoogleDriveService {
           existingFile,
           uploadMedia: media,
         );
-        print("File updated: ${updated.name} (ID: ${updated.id})");
+        logd("File updated: ${updated.name} (ID: ${updated.id})");
         return updated.id;
       } else {
         // File does not exist → create it in the folder
@@ -169,11 +170,11 @@ class GoogleDriveService {
             ..parents = [folderId],
           uploadMedia: media,
         );
-        print("File uploaded: ${uploaded.name} (ID: ${uploaded.id})");
+        logd("File uploaded: ${uploaded.name} (ID: ${uploaded.id})");
         return uploaded.id;
       }
     } catch (e) {
-      print("Error uploading file: $e");
+      logd("Error uploading file: $e");
       return null;
     }
   }
@@ -197,7 +198,7 @@ class GoogleDriveService {
 
     await media.stream.pipe(sink);
     await sink.close();
-    print("File downloaded to: ${file.path}");
+    logd("File downloaded to: ${file.path}");
 
     return file;
   }

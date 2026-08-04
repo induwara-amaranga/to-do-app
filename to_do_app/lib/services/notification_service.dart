@@ -5,8 +5,10 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:to_do_app/data/database.dart';
+import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 import 'package:to_do_app/utils/string_utils.dart';
+import 'package:to_do_app/utils/log.dart';
 
 //import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -20,7 +22,7 @@ class NotificationService {
     //tz.initializeTimeZones();
     //var currentTimeZone = await FlutterTimezone.getLocalTimezone();
     //String zoneString = currentTimeZone.identifier;
-    //print("detected zone is=====================>$zoneString");
+    //logd("detected zone is=====================>$zoneString");
     //tz.setLocalLocation(tz.getLocation(zoneString));
     //android intialization settings
     const AndroidInitializationSettings androidInit =
@@ -73,7 +75,7 @@ class NotificationService {
               ?.requestNotificationsPermission();
 
       granted = result ?? false;
-      print("Android notification permission granted: $granted");
+      logd("Android notification permission granted: $granted");
 
       // Request exact alarm permission (Android 12+)
       final bool? exactAlarmGranted =
@@ -83,7 +85,7 @@ class NotificationService {
               >()
               ?.requestExactAlarmsPermission();
 
-      print("Exact alarm permission granted: $exactAlarmGranted");
+      logd("Exact alarm permission granted: $exactAlarmGranted");
     } else if (Platform.isIOS) {
       final bool? result = await _notifications
           .resolvePlatformSpecificImplementation<
@@ -92,7 +94,7 @@ class NotificationService {
           ?.requestPermissions(alert: true, badge: true, sound: true);
 
       granted = result ?? false;
-      print("iOS notification permission granted: $granted");
+      logd("iOS notification permission granted: $granted");
     }
 
     return granted;
@@ -100,20 +102,43 @@ class NotificationService {
 
   static NotificationDetails notificationDetails(
     String priority,
-    bool isFullscreen,
-  ) {
+    bool isFullscreen, {
+    bool showOnLockScreen = true,
+    String? notifRingtoneUri,
+    String? alarmRingtoneUri,
+  }) {
+    final visibility =
+        showOnLockScreen
+            ? NotificationVisibility.public
+            : NotificationVisibility.secret;
+
+    // Full-screen (alarm-like) reminders use the alarm ringtone; regular
+    // reminders use the notification ringtone. Settings default to
+    // placeholder names ("Chime"/"Radar") until the user actually picks a
+    // tone via RingtonePicker, at which point they become content:// URIs.
+    final String? soundUri = isFullscreen ? alarmRingtoneUri : notifRingtoneUri;
+    final AndroidNotificationSound? sound =
+        (soundUri != null && soundUri.startsWith('content://'))
+            ? UriAndroidNotificationSound(soundUri)
+            : null;
+    // Android channels are immutable once created — a custom sound needs
+    // its own channel id, or the first-ever sound wins forever.
+    String channelId(String base) =>
+        sound == null ? base : '${base}_${soundUri.hashCode}';
     switch (priority) {
       case "High":
         return NotificationDetails(
           android: AndroidNotificationDetails(
-            'high_task_channel_id',
+            channelId('high_task_channel_id'),
             'High Priority Task Notifications',
             channelDescription: 'Notifications for high priority to-do tasks',
             importance: Importance.max,
             priority: Priority.high,
             playSound: true,
+            sound: sound,
             enableVibration: true,
             fullScreenIntent: isFullscreen,
+            visibility: visibility,
             color: const Color.fromARGB(255, 255, 161, 154),
             vibrationPattern: Int64List.fromList([0, 1000, 500, 2000]),
             actions: <AndroidNotificationAction>[
@@ -140,15 +165,17 @@ class NotificationService {
           iOS: DarwinNotificationDetails(),
         );
       case "Medium":
-        return const NotificationDetails(
+        return NotificationDetails(
           android: AndroidNotificationDetails(
-            'medium_task_channel_id',
+            channelId('medium_task_channel_id'),
             'Medium Priority Task Notifications',
             channelDescription: 'Notifications for medium priority to-do tasks',
             importance: Importance.max,
             priority: Priority.high,
             playSound: true,
-            color: Color.fromARGB(255, 253, 244, 170),
+            sound: sound,
+            visibility: visibility,
+            color: const Color.fromARGB(255, 253, 244, 170),
             actions: <AndroidNotificationAction>[
               AndroidNotificationAction(
                 'mark_done',
@@ -173,7 +200,7 @@ class NotificationService {
           iOS: DarwinNotificationDetails(),
         );
       case "Low":
-        return const NotificationDetails(
+        return NotificationDetails(
           android: AndroidNotificationDetails(
             'low_task_channel_id',
             'Low Priority Task Notifications',
@@ -181,6 +208,7 @@ class NotificationService {
             importance: Importance.max,
             priority: Priority.high,
             playSound: false,
+            visibility: visibility,
             actions: <AndroidNotificationAction>[
               AndroidNotificationAction(
                 'mark_done',
@@ -205,14 +233,16 @@ class NotificationService {
           iOS: DarwinNotificationDetails(),
         );
     }
-    return const NotificationDetails(
+    return NotificationDetails(
       android: AndroidNotificationDetails(
-        'task_channel_id',
+        channelId('task_channel_id'),
         'Task Notifications',
         channelDescription: 'Notifications for to-do tasks',
         importance: Importance.max,
         priority: Priority.high,
         playSound: true,
+        sound: sound,
+        visibility: visibility,
         actions: <AndroidNotificationAction>[
           AndroidNotificationAction(
             'mark_done',
@@ -244,7 +274,7 @@ class NotificationService {
     String? body,
     String? payload,
   }) async {
-    print("instant notification showing");
+    logd("instant notification showing");
     return _notifications.show(
       id,
       title,
@@ -266,6 +296,9 @@ class NotificationService {
     required String priority,
     required String repeatType,
     required bool isFullScreen,
+    bool showOnLockScreen = true,
+    String? notifRingtoneUri,
+    String? alarmRingtoneUri,
   }) async {
     if (!await isNotificationPermissionGranted()) {
       final bool granted = await requestNotificationPermission();
@@ -282,12 +315,12 @@ class NotificationService {
 
     final now = tz.TZDateTime.now(tz.UTC);
 
-    print(
+    logd(
       "------------------------------------------Scheduling notification for $scheduledDateTime | now=$now | repeat=$repeatType -----------",
     );
 
     if (scheduledDateTime.isBefore(now)) {
-      print("⚠️ Scheduled time is in the past! Reminder not set.");
+      logd("⚠️ Scheduled time is in the past! Reminder not set.");
       return;
     }
 
@@ -317,7 +350,7 @@ class NotificationService {
             >()
             ?.requestFullScreenIntentPermission() ==
         false) {
-      print("Full screen intent permission denied");
+      logd("Full screen intent permission denied");
     }
 
     try {
@@ -333,7 +366,13 @@ class NotificationService {
         _title,
         body,
         scheduledDateTime,
-        notificationDetails(priority, isFullScreen),
+        notificationDetails(
+          priority,
+          isFullScreen,
+          showOnLockScreen: showOnLockScreen,
+          notifRingtoneUri: notifRingtoneUri,
+          alarmRingtoneUri: alarmRingtoneUri,
+        ),
         payload: payload.toString(),
 
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -344,7 +383,7 @@ class NotificationService {
         matchDateTimeComponents: matchComponents,
       );
     } catch (e) {
-      print("Scheduling error: $e");
+      logd("Scheduling error: $e");
     }
   }
 
@@ -394,7 +433,7 @@ class NotificationService {
   //     response.actionId ?? 'no_action',
   //   );
 
-  //   print('Background action executed');
+  //   logd('Background action executed');
   // }
 
   @pragma('vm:entry-point')
@@ -403,14 +442,14 @@ class NotificationService {
   ) async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    print('BACKGROUND action: ${response.actionId}');
+    logd('BACKGROUND action: ${response.actionId}');
 
     try {
       final id = response.id;
       final actionId = response.actionId;
-      print("get list");
+      logd("get list");
       final payload = StringUtils.listFromString(response.payload!);
-      print("Notification payload: $payload");
+      logd("Notification payload: $payload");
       final DateTime now = DateTime.now();
 
       if (payload[1] == 'High') {
@@ -431,15 +470,15 @@ class NotificationService {
       }
 
       if (actionId == 'mark_done') {
-        print("✅ Task $payload marked as done!");
+        logd("✅ Task $payload marked as done!");
         // TODO: update database / provider
       } else if (actionId == 'working') {
-        print("🕒 Working on task $payload");
+        logd("🕒 Working on task $payload");
         DateTime dueDateTime = DateTimeUtilsHelper.parseDateTime(payload[2]);
 
         //final payload = response.payload;
       } else if (actionId == 'dismiss') {
-        print("❌ Dismissed task $payload");
+        logd("❌ Dismissed task $payload");
 
         List<Object> ids =
             payload.length > 5 ? StringUtils.listFromString(payload[5]) : [];
@@ -449,27 +488,27 @@ class NotificationService {
             final int parsedId = int.parse(remId.toString().trim());
             await cancelNotification(parsedId);
           } catch (e) {
-            print("Failed to parse/cancel notification id '$remId': $e");
+            logd("Failed to parse/cancel notification id '$remId': $e");
           }
         }
       } else {
-        print("Notification tapped normally");
+        logd("Notification tapped normally");
       }
     } catch (e) {
-      print("---------action error : $e------");
+      logd("---------action error : $e------");
     }
   }
 
   @pragma('vm:entry-point')
   static void onNotificationResponse(NotificationResponse response) async {
-    print("---------------------------------");
+    logd("---------------------------------");
 
     try {
       final id = response.id;
       final actionId = response.actionId;
-      print("get list");
+      logd("get list");
       final payload = StringUtils.listFromString(response.payload!);
-      print("Notification payload: $payload");
+      logd("Notification payload: $payload");
       final DateTime now = DateTime.now();
 
       if (payload[1] == 'High') {
@@ -490,10 +529,10 @@ class NotificationService {
       }
 
       if (actionId == 'mark_done') {
-        print("✅ Task $payload marked as done!");
+        logd("✅ Task $payload marked as done!");
         // TODO: update database / provider
       } else if (actionId == 'working') {
-        print("🕒 Working on task $payload");
+        logd("🕒 Working on task $payload");
         DateTime dueDateTime = DateTimeUtilsHelper.parseDateTime(payload[2]);
         // switch (payload[1]) {
         //   case 'High':
@@ -527,7 +566,7 @@ class NotificationService {
         //     // if (!newTime.isBefore(dueDateTime)) {
         //     //   newTime = dueDateTime;
         //     // }
-        //     // //print("low - secheduled");
+        //     // //logd("low - secheduled");
         //     // rescheduleNotification(
         //     //   payload: payload,
         //     //   id: id!,
@@ -537,12 +576,12 @@ class NotificationService {
         //     // );
         //     break;
         //   default:
-        //     print("Unknown priority level: $payload");
+        //     logd("Unknown priority level: $payload");
         // }
 
         //final payload = response.payload;
       } else if (actionId == 'dismiss') {
-        print("❌ Dismissed task $payload");
+        logd("❌ Dismissed task $payload");
         List<Object> ids =
             payload.length > 5 ? StringUtils.listFromString(payload[5]) : [];
         for (Object remId in ids) {
@@ -550,10 +589,10 @@ class NotificationService {
         }
         //await cancelNotification(id!);
       } else {
-        print("Notification tapped normally");
+        logd("Notification tapped normally");
       }
     } catch (e) {
-      print("---------action error : $e------");
+      logd("---------action error : $e------");
     }
   }
 
@@ -593,15 +632,106 @@ class NotificationService {
 
   //function to cancel specific notification
   static Future<void> cancelNotification(int id) async {
-    print("Attempting to cancel notification with id: $id");
+    logd("Attempting to cancel notification with id: $id");
     try {
       await _notifications.cancel(id);
-      print("notification $id cancelled");
+      logd("notification $id cancelled");
     } catch (e) {
-      print("Error cancelling notification $id: $e");
+      logd("Error cancelling notification $id: $e");
     }
-    //print("canceled: $id");
+    //logd("canceled: $id");
     //if there is no notification with id, nothing happens
+  }
+
+  // ── Daily summary notifications (Settings › Notifications › Behavior) ───
+  // Fixed IDs so re-running this is idempotent (reschedule cancels+replaces
+  // the same notification rather than piling up new ones).
+  static const int _morningPlanId = 900001;
+  static const int _eveningReviewId = 900002;
+  static const int _taskOverviewId = 900003;
+
+  /// Schedules (or cancels, if the toggle is off) the three daily summary
+  /// notifications. Safe to call repeatedly — call at app startup and again
+  /// whenever the relevant settings change.
+  static Future<void> scheduleDailySummaryNotifications(ToDoDataBase db) async {
+    await _scheduleOrCancelDaily(
+      db: db,
+      enabled: db.settings.morningPlan,
+      id: _morningPlanId,
+      hour: 7,
+      minute: 30,
+      title: "Good morning! ☀️",
+      body: "Here's your plan for today. Tap to review your tasks.",
+    );
+    await _scheduleOrCancelDaily(
+      db: db,
+      enabled: db.settings.eveningReview,
+      id: _eveningReviewId,
+      hour: 21,
+      minute: 0,
+      title: "Evening Review 🌙",
+      body: "How did today go? Tap to review what you completed.",
+    );
+    await _scheduleOrCancelDaily(
+      db: db,
+      enabled: db.settings.taskOverview,
+      id: _taskOverviewId,
+      hour: 12,
+      minute: 0,
+      title: "Daily Task Overview 📋",
+      body: "Here's a look at your tasks for today.",
+    );
+  }
+
+  static Future<void> _scheduleOrCancelDaily({
+    required ToDoDataBase db,
+    required bool enabled,
+    required int id,
+    required int hour,
+    required int minute,
+    required String title,
+    required String body,
+  }) async {
+    if (!enabled) {
+      await cancelNotification(id);
+      return;
+    }
+    if (!await isNotificationPermissionGranted()) {
+      final granted = await requestNotificationPermission();
+      if (!granted) return;
+    }
+    final now = tz.TZDateTime.now(tz.local);
+    var scheduled = tz.TZDateTime(
+      tz.local,
+      now.year,
+      now.month,
+      now.day,
+      hour,
+      minute,
+    );
+    if (scheduled.isBefore(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+    try {
+      await _notifications.zonedSchedule(
+        id,
+        title,
+        body,
+        scheduled,
+        notificationDetails(
+          "Medium",
+          false,
+          showOnLockScreen: db.settings.lockScreenReminder,
+          notifRingtoneUri: db.settings.notifRingtone,
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.wallClockTime,
+        matchDateTimeComponents: DateTimeComponents.time, // repeats daily
+      );
+    } catch (e) {
+      logd("Failed to schedule daily summary notification $id: $e");
+    }
   }
 
   static Future<void> scheduleInitialRemainderForTask(
@@ -611,12 +741,12 @@ class NotificationService {
     ToDoDataBase db,
     int index,
   ) async {
-    List<List<dynamic>> toDoList = db.toDoList;
+    List<Task> toDoList = db.toDoList;
     DateTime? dueDate = DateTimeUtilsHelper.parseDate(taskDetails['dueDate']);
     DateTime? dueTime = DateTimeUtilsHelper.parseTime(taskDetails['dueTime']);
 
     if (dueDate == null || dueTime == null) {
-      print(
+      logd(
         "scheduleInitialRemainderForTask: dueDate or dueTime is null, skipping.",
       );
       return;
@@ -707,6 +837,9 @@ class NotificationService {
       try {
         await NotificationService.sheduledTimeNotification(
           isFullScreen: false,
+          showOnLockScreen: db.settings.lockScreenReminder,
+          notifRingtoneUri: db.settings.notifRingtone,
+          alarmRingtoneUri: db.settings.alarmRingtone,
           repeatType: taskDetails["repeatType"],
           priority: taskDetails['taskPriority'],
           id: reminderId,
@@ -727,13 +860,11 @@ class NotificationService {
           ],
         );
       } catch (e) {
-        print("Schedule error from task page => $e");
+        logd("Schedule error from task page => $e");
       }
 
-      toDoList[index][19] = [
-        reminderId,
-      ]; // ✅ fixed: was using undeclared reminderIds
-      db.updateDataBase();
+      toDoList[index].notificationIds = [reminderId];
+      await db.saveTaskAt(index);
     }
 
     // --- Priority-based interval reminders ---
@@ -773,8 +904,8 @@ class NotificationService {
         }
       }
 
-      print("${taskDetails['taskPriority']} reminder times: $reminderTimes");
-      print("${taskDetails['taskPriority']} reminder IDs: $reminderIds");
+      logd("${taskDetails['taskPriority']} reminder times: $reminderTimes");
+      logd("${taskDetails['taskPriority']} reminder IDs: $reminderIds");
 
       bool isFullScreen = isHighPriority;
 
@@ -788,6 +919,9 @@ class NotificationService {
         try {
           await NotificationService.sheduledTimeNotification(
             isFullScreen: isFullScreen,
+            showOnLockScreen: db.settings.lockScreenReminder,
+            notifRingtoneUri: db.settings.notifRingtone,
+            alarmRingtoneUri: db.settings.alarmRingtone,
             repeatType: taskDetails["repeatType"],
             priority: taskDetails['taskPriority'],
             id: reminderIds[i],
@@ -808,14 +942,14 @@ class NotificationService {
             ],
           );
         } catch (e) {
-          print("${taskDetails['taskPriority']} task schedule error => $e");
+          logd("${taskDetails['taskPriority']} task schedule error => $e");
         }
         isFullScreen = false; // only first notification is fullscreen
         i++;
       }
 
-      toDoList[index][19] = reminderIds;
-      db.updateDataBase();
+      toDoList[index].notificationIds = reminderIds;
+      await db.saveTaskAt(index);
     }
   }
 }

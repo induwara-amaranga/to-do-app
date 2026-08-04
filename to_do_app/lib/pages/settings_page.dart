@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:to_do_app/components/ringtone_picker.dart';
 import 'package:to_do_app/components/task_page_bottom_nav_bar.dart';
 import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/providers/auth_provider.dart';
 import 'package:to_do_app/themes/theme_provider.dart';
+import 'package:to_do_app/models/settings.dart';
+import 'package:to_do_app/services/notification_service.dart';
+import 'package:to_do_app/utils/date_time_utils.dart';
+//import 'package:flutter/services.dart';
 
 // ════════════════════════════════════════════════════════════════
 //  Settings — Flutter port of settings_page.html mockup.
@@ -529,11 +535,11 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  Map<String, dynamic> get _s => widget.db.settings;
+  AppSettings get _s => widget.db.settings;
 
-  dynamic _get(String key, dynamic fallback) => _s[key] ?? fallback;
-  void _set(String key, dynamic value) {
-    setState(() => _s[key] = value);
+  //dynamic _get(String key, dynamic fallback) => _s.key ?? fallback;
+  void _set(AppSettings updated) {
+    setState(() => widget.db.settings = updated);
     widget.db.saveSettings();
   }
 
@@ -679,8 +685,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: 'Task Completion Tone',
                 subtitle: 'Play sound on task done',
                 trailing: _Toggle(
-                  _get('completionTone', true),
-                  (v) => _set('completionTone', v),
+                  _s.completionTone,
+                  (v) => _set(_s.copyWith(completionTone: v)),
                 ),
               ),
               _Row(
@@ -689,8 +695,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: 'Task Completion Animation',
                 subtitle: 'Show confetti animation',
                 trailing: _Toggle(
-                  _get('completionAnimation', true),
-                  (v) => _set('completionAnimation', v),
+                  _s.completionAnimation,
+                  (v) => _set(_s.copyWith(completionAnimation: v)),
                 ),
               ),
               _Row(
@@ -699,21 +705,15 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: 'Default Category',
                 subtitle: 'For new tasks',
                 chevron: true,
-                trailing: _ValueBadge(_get('defaultCategory', 'Inbox')),
+                trailing: _ValueBadge(_s.defaultCategory),
                 onTap: () async {
                   final v = await _pickOption(
                     context,
                     title: 'Default Category',
-                    options: const [
-                      'Inbox',
-                      'Work',
-                      'Personal',
-                      'Shopping',
-                      'Health',
-                    ],
-                    current: _get('defaultCategory', 'Inbox'),
+                    options: widget.db.categories,
+                    current: _s.defaultCategory,
                   );
-                  if (v != null) _set('defaultCategory', v);
+                  if (v != null) _set(_s.copyWith(defaultCategory: v));
                 },
               ),
               _Row(
@@ -721,7 +721,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 color: 'teal',
                 title: 'Language',
                 chevron: true,
-                trailing: _ValueBadge(_get('language', 'English')),
+                trailing: _ValueBadge(_s.language),
                 onTap: () async {
                   final v = await _pickOption(
                     context,
@@ -735,9 +735,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       'Japanese',
                       'Arabic',
                     ],
-                    current: _get('language', 'English'),
+                    current: _s.language,
                   );
-                  if (v != null) _set('language', v);
+                  if (v != null) _set(_s.copyWith(language: v));
                 },
               ),
             ],
@@ -930,11 +930,12 @@ class NotificationsPage extends StatefulWidget {
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
-  Map<String, dynamic> get _s => widget.db.settings;
-  dynamic _get(String k, dynamic f) => _s[k] ?? f;
-  void _set(String k, dynamic v) {
-    setState(() => _s[k] = v);
+  AppSettings get _s => widget.db.settings;
+  //dynamic _get(String k, dynamic f) => _s[k] ?? f;
+  void _set(AppSettings updated) {
+    setState(() => widget.db.settings = updated);
     widget.db.saveSettings();
+    NotificationService.scheduleDailySummaryNotifications(widget.db);
   }
 
   @override
@@ -950,37 +951,85 @@ class _NotificationsPageState extends State<NotificationsPage> {
               color: 'orange',
               title: 'Task Reminder Default Time',
               chevron: true,
-              trailing: _ValueBadge(_get('reminderTime', '9:00 AM')),
-              onTap: () async {
-                final v = await _pickOption(
-                  context,
-                  title: 'Reminder Default Time',
-                  options: const [
-                    '7:00 AM',
-                    '8:00 AM',
-                    '9:00 AM',
-                    '10:00 AM',
-                    '12:00 PM',
-                  ],
-                  current: _get('reminderTime', '9:00 AM'),
-                );
-                if (v != null) _set('reminderTime', v);
-              },
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                width: 50,
+
+                child: TextField(
+                  controller: TextEditingController(
+                    text: _s.reminderTime.toString(),
+                  ),
+                  keyboardType: TextInputType.number,
+                  onSubmitted: (v) {
+                    final n = int.tryParse(v);
+                    if (n != null && n >= 0) {
+                      _set(_s.copyWith(reminderTime: n.toString()));
+                    }
+                  },
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withAlpha(160),
+                        width: 1.5,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withAlpha(100),
+                        width: 1.5,
+                      ),
+                    ),
+                    // focusedBorder: OutlineInputBorder(
+                    //   borderRadius: BorderRadius.circular(8),
+                    //   borderSide: BorderSide(
+                    //     color: Theme.of(
+                    //       context,
+                    //     ).colorScheme.onSurface.withAlpha(200),
+                    //     width: 2,
+                    //   ),
+                    // ),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                  ),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withAlpha(160),
+                  ),
+                ),
+              ),
             ),
             _Row(
               icon: Icons.notifications_active_outlined,
               color: 'amber',
               title: 'Default Task Reminder Type',
               chevron: true,
-              trailing: _ValueBadge(_get('reminderType', 'Notification')),
+              trailing: _ValueBadge(_s.reminderType),
               onTap: () async {
-                final v = await _pickOption(
+                String? v = await _pickOption(
                   context,
                   title: 'Reminder Type',
-                  options: const ['Notification', 'Alarm', 'Silent'],
-                  current: _get('reminderType', 'Notification'),
+                  options: const [
+                    'No reminder',
+                    'minutes',
+                    'hours',
+                    'days',
+                    'weeks',
+                  ],
+                  current: _s.reminderType,
                 );
-                if (v != null) _set('reminderType', v);
+                if (v == 'No reminder') v = 'None';
+                if (v != null) _set(_s.copyWith(reminderType: v));
               },
             ),
           ],
@@ -994,15 +1043,21 @@ class _NotificationsPageState extends State<NotificationsPage> {
               color: 'green',
               title: 'Default Notification Ringtone',
               chevron: true,
-              trailing: _ValueBadge(_get('notifRingtone', 'Chime')),
+              trailing: _ValueBadge(_s.notifName),
               onTap: () async {
-                final v = await _pickOption(
-                  context,
-                  title: 'Notification Ringtone',
-                  options: const ['Chime', 'Radar', 'Bloom', 'Ping', 'None'],
-                  current: _get('notifRingtone', 'Chime'),
+                final notifMap = await RingtonePicker.pickNotificationTone(
+                  currentUri: _s.notifRingtone,
                 );
-                if (v != null) _set('notifRingtone', v);
+                if (notifMap != null) {
+                  setState(
+                    () => _set(_s.copyWith(notifRingtone: notifMap['uri'])),
+                  );
+                  setState(
+                    () => _set(_s.copyWith(notifName: notifMap['name'])),
+                  );
+                } else {
+                  print('No ringtone selected');
+                }
               },
             ),
             _Row(
@@ -1010,15 +1065,19 @@ class _NotificationsPageState extends State<NotificationsPage> {
               color: 'red',
               title: 'Default Alarm Ringtone',
               chevron: true,
-              trailing: _ValueBadge(_get('alarmRingtone', 'Radar')),
+              trailing: _ValueBadge(_s.alarmName),
               onTap: () async {
-                final v = await _pickOption(
-                  context,
-                  title: 'Alarm Ringtone',
-                  options: const ['Chime', 'Radar', 'Bloom', 'Ping', 'None'],
-                  current: _get('alarmRingtone', 'Radar'),
+                final alarmMap = await RingtonePicker.pickAlarmTone(
+                  currentUri: _s.alarmRingtone,
                 );
-                if (v != null) _set('alarmRingtone', v);
+                if (alarmMap != null) {
+                  setState(
+                    () => _set(_s.copyWith(alarmRingtone: alarmMap['uri'])),
+                  );
+                  setState(
+                    () => _set(_s.copyWith(alarmName: alarmMap['name'])),
+                  );
+                }
               },
             ),
           ],
@@ -1033,8 +1092,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
               title: 'Screen Lock Task Reminder',
               subtitle: 'Show on lock screen',
               trailing: _Toggle(
-                _get('lockScreenReminder', true),
-                (v) => _set('lockScreenReminder', v),
+                _s.lockScreenReminder,
+                (v) => _set(_s.copyWith(lockScreenReminder: v)),
               ),
             ),
             _Row(
@@ -1043,8 +1102,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
               title: 'Add Tasks from Notification Bar',
               subtitle: 'Quick-add from pull-down',
               trailing: _Toggle(
-                _get('quickAddNotif', true),
-                (v) => _set('quickAddNotif', v),
+                _s.quickAddNotif,
+                (v) => _set(_s.copyWith(quickAddNotif: v)),
               ),
             ),
             _Row(
@@ -1053,8 +1112,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
               title: 'Task Overview',
               subtitle: 'Daily summary notification',
               trailing: _Toggle(
-                _get('taskOverview', false),
-                (v) => _set('taskOverview', v),
+                _s.taskOverview,
+                (v) => _set(_s.copyWith(taskOverview: v)),
               ),
             ),
             _Row(
@@ -1063,8 +1122,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
               title: 'Morning Plan',
               subtitle: 'Daily morning briefing',
               trailing: _Toggle(
-                _get('morningPlan', true),
-                (v) => _set('morningPlan', v),
+                _s.morningPlan,
+                (v) => _set(_s.copyWith(morningPlan: v)),
               ),
             ),
             _Row(
@@ -1073,8 +1132,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
               title: 'Evening Review',
               subtitle: 'End-of-day recap',
               trailing: _Toggle(
-                _get('eveningReview', false),
-                (v) => _set('eveningReview', v),
+                _s.eveningReview,
+                (v) => _set(_s.copyWith(eveningReview: v)),
               ),
             ),
           ],
@@ -1202,10 +1261,10 @@ class WidgetPage extends StatefulWidget {
 }
 
 class _WidgetPageState extends State<WidgetPage> {
-  Map<String, dynamic> get _s => widget.db.settings;
-  dynamic _get(String k, dynamic f) => _s[k] ?? f;
-  void _set(String k, dynamic v) {
-    setState(() => _s[k] = v);
+  AppSettings get _s => widget.db.settings;
+  //dynamic _get(String k, dynamic f) => _s[k] ?? f;
+  void _set(AppSettings newSettings) {
+    setState(() => widget.db.settings = newSettings);
     widget.db.saveSettings();
   }
 
@@ -1222,15 +1281,15 @@ class _WidgetPageState extends State<WidgetPage> {
               color: 'teal',
               title: 'Widget Style',
               chevron: true,
-              trailing: _ValueBadge(_get('widgetStyle', 'Compact')),
+              trailing: _ValueBadge(_s.widgetStyle),
               onTap: () async {
                 final v = await _pickOption(
                   context,
                   title: 'Widget Style',
                   options: const ['Compact', 'Expanded', 'Minimal'],
-                  current: _get('widgetStyle', 'Compact'),
+                  current: _s.widgetStyle,
                 );
-                if (v != null) _set('widgetStyle', v);
+                if (v != null) _set(_s.copyWith(widgetStyle: v));
               },
             ),
             _Row(
@@ -1238,15 +1297,15 @@ class _WidgetPageState extends State<WidgetPage> {
               color: 'purple',
               title: 'Widget Size',
               chevron: true,
-              trailing: _ValueBadge(_get('widgetSize', 'Medium')),
+              trailing: _ValueBadge(_s.widgetSize),
               onTap: () async {
                 final v = await _pickOption(
                   context,
                   title: 'Widget Size',
                   options: const ['Small', 'Medium', 'Large'],
-                  current: _get('widgetSize', 'Medium'),
+                  current: _s.widgetSize,
                 );
-                if (v != null) _set('widgetSize', v);
+                if (v != null) _set(_s.copyWith(widgetSize: v));
               },
             ),
           ],
@@ -1260,8 +1319,8 @@ class _WidgetPageState extends State<WidgetPage> {
               color: 'green',
               title: 'Show Completed Tasks',
               trailing: _Toggle(
-                _get('widgetShowCompleted', false),
-                (v) => _set('widgetShowCompleted', v),
+                _s.widgetShowCompleted,
+                (v) => _set(_s.copyWith(widgetShowCompleted: v)),
               ),
             ),
             _Row(
@@ -1269,8 +1328,8 @@ class _WidgetPageState extends State<WidgetPage> {
               color: 'amber',
               title: 'Show Priority Tasks Only',
               trailing: _Toggle(
-                _get('widgetPriorityOnly', true),
-                (v) => _set('widgetPriorityOnly', v),
+                _s.widgetPriorityOnly,
+                (v) => _set(_s.copyWith(widgetPriorityOnly: v)),
               ),
             ),
             _Row(
@@ -1278,15 +1337,15 @@ class _WidgetPageState extends State<WidgetPage> {
               color: 'blue',
               title: 'Number of Tasks',
               chevron: true,
-              trailing: _ValueBadge('${_get('widgetTaskCount', 5)}'),
+              trailing: _ValueBadge('${_s.widgetTaskCount}'),
               onTap: () async {
                 final v = await _pickOption(
                   context,
                   title: 'Tasks to Show',
                   options: const ['3', '4', '5', '6', '7', '8'],
-                  current: '${_get('widgetTaskCount', 5)}',
+                  current: '${_s.widgetTaskCount}',
                 );
-                if (v != null) _set('widgetTaskCount', int.parse(v));
+                if (v != null) _set(_s.copyWith(widgetTaskCount: int.parse(v)));
               },
             ),
           ],
@@ -1309,10 +1368,10 @@ class DateTimePage extends StatefulWidget {
 }
 
 class _DateTimePageState extends State<DateTimePage> {
-  Map<String, dynamic> get _s => widget.db.settings;
-  dynamic _get(String k, dynamic f) => _s[k] ?? f;
-  void _set(String k, dynamic v) {
-    setState(() => _s[k] = v);
+  AppSettings get _s => widget.db.settings;
+  //dynamic _get(String k, dynamic f) => _s[k] ?? f;
+  void _set(AppSettings newSettings) {
+    setState(() => widget.db.settings = newSettings);
     widget.db.saveSettings();
   }
 
@@ -1354,7 +1413,7 @@ class _DateTimePageState extends State<DateTimePage> {
               color: 'blue',
               title: 'First Day of Week',
               chevron: true,
-              trailing: _ValueBadge(_get('firstDayOfWeek', 'Sunday')),
+              trailing: _ValueBadge(_s.firstDayOfWeek),
               onTap: () async {
                 final v = await _pickOption(
                   context,
@@ -1365,9 +1424,9 @@ class _DateTimePageState extends State<DateTimePage> {
                     'Saturday',
                     'System Default',
                   ],
-                  current: _get('firstDayOfWeek', 'Sunday'),
+                  current: _s.firstDayOfWeek,
                 );
-                if (v != null) _set('firstDayOfWeek', v);
+                if (v != null) _set(_s.copyWith(firstDayOfWeek: v));
               },
             ),
             _Row(
@@ -1375,15 +1434,15 @@ class _DateTimePageState extends State<DateTimePage> {
               color: 'green',
               title: 'Time Format',
               chevron: true,
-              trailing: _ValueBadge(_get('timeFormat', '12 hour')),
+              trailing: _ValueBadge(_s.timeFormat),
               onTap: () async {
                 final v = await _pickOption(
                   context,
                   title: 'Time Format',
                   options: const ['12 hour', '24 hour'],
-                  current: _get('timeFormat', '12 hour'),
+                  current: _s.timeFormat,
                 );
-                if (v != null) _set('timeFormat', v);
+                if (v != null) _set(_s.copyWith(timeFormat: v));
               },
             ),
             _Row(
@@ -1391,15 +1450,15 @@ class _DateTimePageState extends State<DateTimePage> {
               color: 'amber',
               title: 'Date Format',
               chevron: true,
-              trailing: _ValueBadge(_get('dateFormat', 'd/m/y')),
+              trailing: _ValueBadge(_s.dateFormat),
               onTap: () async {
                 final v = await _pickOption(
                   context,
                   title: 'Date Format',
                   options: const ['d/m/y', 'm/d/y', 'y/m/d'],
-                  current: _get('dateFormat', 'd/m/y'),
+                  current: _s.dateFormat,
                 );
-                if (v != null) _set('dateFormat', v);
+                if (v != null) _set(_s.copyWith(dateFormat: v));
               },
             ),
             _Row(
@@ -1407,15 +1466,15 @@ class _DateTimePageState extends State<DateTimePage> {
               color: 'pink',
               title: 'Default Due Date',
               chevron: true,
-              trailing: _ValueBadge(_get('defaultDueDate', 'Today')),
+              trailing: _ValueBadge(_s.defaultDueDate),
               onTap: () async {
                 final v = await _pickOption(
                   context,
                   title: 'Default Due Date',
                   options: const ['Today', 'Tomorrow', 'No default'],
-                  current: _get('defaultDueDate', 'Today'),
+                  current: _s.defaultDueDate,
                 );
-                if (v != null) _set('defaultDueDate', v);
+                if (v != null) _set(_s.copyWith(defaultDueDate: v));
               },
             ),
             _Row(
@@ -1423,16 +1482,23 @@ class _DateTimePageState extends State<DateTimePage> {
               color: 'teal',
               title: 'Time Zone',
               chevron: true,
-              trailing: _ValueBadge(_get('timeZoneLabel', 'UTC+0')),
+              trailing: _ValueBadge(_s.timeZoneLabel),
               onTap: () async {
                 final v = await _pickOption(
                   context,
                   title: 'Time Zone',
                   options: _timezones,
-                  current: _get('timeZoneLabel', 'UTC+0'),
+                  current: _s.timeZoneLabel,
                   searchable: true,
                 );
-                if (v != null) _set('timeZoneLabel', v);
+                if (v != null) {
+                  final location =
+                      DateTimeUtilsHelper.locationFromTimeZoneLabel(v);
+                  if (location != null) tz.setLocalLocation(location);
+                  _set(
+                    _s.copyWith(timeZoneLabel: v, timeZoneManuallySet: true),
+                  );
+                }
               },
             ),
           ],

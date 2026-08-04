@@ -3,10 +3,13 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as gcal;
+import 'package:to_do_app/utils/log.dart';
 
 import 'package:http/http.dart' as http;
 //import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:to_do_app/data/database.dart';
+import 'package:to_do_app/models/calendar_event.dart';
+import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/services/google_sign.dart';
 import 'package:uuid/uuid.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
@@ -28,7 +31,7 @@ class GoogleCalendarService {
 
   // /// Signs in with Google → authenticates Supabase → returns Calendar API client
   // static Future<gcal.CalendarApi?> initializeSignIn() async {
-  //   print("🔄 Initializing Google Sign-In...");
+  //   logd("🔄 Initializing Google Sign-In...");
 
   //   final GoogleSignIn signIn = GoogleSignIn.instance;
 
@@ -43,7 +46,7 @@ class GoogleCalendarService {
   //   );
 
   //   if (googleAccount == null) {
-  //     print('❌ Sign-in cancelled by user.');
+  //     logd('❌ Sign-in cancelled by user.');
   //     return null;
   //   }
 
@@ -58,7 +61,7 @@ class GoogleCalendarService {
   //   final accessToken = googleAuthorization.accessToken;
 
   //   if (idToken == null || accessToken == null) {
-  //     print('❌ Missing tokens.');
+  //     logd('❌ Missing tokens.');
   //     return null;
   //   }
 
@@ -69,13 +72,13 @@ class GoogleCalendarService {
   //     accessToken: accessToken,
   //   );
 
-  //   print('✅ Signed in to Supabase successfully as ${googleAccount.email}');
-  //   print('🔑 Access Token: $accessToken');
+  //   logd('✅ Signed in to Supabase successfully as ${googleAccount.email}');
+  //   logd('🔑 Access Token: $accessToken');
 
   //   // 📆 Initialize Google Calendar API
   //   final calendarApi = await _getCalendarApi(accessToken);
 
-  //   print('✅ Google Calendar API ready');
+  //   logd('✅ Google Calendar API ready');
   //   return calendarApi;
   // }
 
@@ -97,12 +100,12 @@ class GoogleCalendarService {
   // }
 
   // static Future<bool> restoreLastSession() async {
-  //   print("🔄 Trying to restore previous Google session...");
+  //   logd("🔄 Trying to restore previous Google session...");
 
   //   String? auth = await storage.read(key: 'google_cal_headers');
 
   //   if (auth == null) {
-  //     print("❌ No stored token. User must sign in once.");
+  //     logd("❌ No stored token. User must sign in once.");
   //     return false;
   //   }
   //   Map<String, dynamic> header = jsonDecode(auth);
@@ -117,16 +120,16 @@ class GoogleCalendarService {
   //     // test token
   //     //await _driveApi!.files.list(pageSize: 1);
 
-  //     print("✅ Restored calendar session without sign-in!");
+  //     logd("✅ Restored calendar session without sign-in!");
   //     return true;
   //   } catch (e) {
-  //     print("❌ Saved token expired: $e");
+  //     logd("❌ Saved token expired: $e");
   //     return false;
   //   }
   // }
 
   // static Future<Map<String, dynamic>?> initializeSignIn() async {
-  //   print("initializing google sign in...");
+  //   logd("initializing google sign in...");
 
   //   // 1️⃣ Initialize GoogleSignIn
   //   await GoogleSignIn.instance.initialize(
@@ -137,13 +140,13 @@ class GoogleCalendarService {
   //   GoogleSignInAccount? account;
 
   //   // 2️⃣ Attempt SILENT sign-in first
-  //   print("Trying silent sign-in...");
+  //   logd("Trying silent sign-in...");
   //   account = await GoogleSignIn.instance.attemptLightweightAuthentication();
 
   //   if (account != null) {
-  //     print("✅ Silent sign-in success: ${account.email}");
+  //     logd("✅ Silent sign-in success: ${account.email}");
   //   } else {
-  //     print("❌ Silent sign-in failed, asking user to sign in...");
+  //     logd("❌ Silent sign-in failed, asking user to sign in...");
   //     // 3️⃣ Fallback to UI sign-in
   //     account = await GoogleSignIn.instance.authenticate(
   //       scopeHint: ['https://www.googleapis.com/auth/calendar'],
@@ -151,7 +154,7 @@ class GoogleCalendarService {
   //   }
 
   //   // 4️⃣ Now request OAuth headers (tokens)
-  //   print("Requesting OAuth headers...");
+  //   logd("Requesting OAuth headers...");
   //   var headers = await account.authorizationClient.authorizationHeaders(
   //     ['https://www.googleapis.com/auth/calendar'],
   //     promptIfNecessary: false, // silent permission request
@@ -159,7 +162,7 @@ class GoogleCalendarService {
 
   //   // 5️⃣ If tokens are null, ask for permission with popup
   //   if (headers == null) {
-  //     print("Silent header generation failed — requesting user consent...");
+  //     logd("Silent header generation failed — requesting user consent...");
   //     headers = await account.authorizationClient.authorizationHeaders([
   //       'https://www.googleapis.com/auth/calendar',
   //     ], promptIfNecessary: true);
@@ -167,16 +170,16 @@ class GoogleCalendarService {
 
   //   // 6️⃣ If STILL no headers → fail
   //   if (headers == null) {
-  //     print("❌ Failed to obtain OAuth headers");
+  //     logd("❌ Failed to obtain OAuth headers");
   //     return null;
   //   }
   //   await storage.write(key: 'google_cal_headers', value: jsonEncode(headers));
 
-  //   print('🔑 Access token: ${headers['Authorization']}');
+  //   logd('🔑 Access token: ${headers['Authorization']}');
 
   //   // 7️⃣ Build Calendar API
   //   final gcal.CalendarApi calendarApi = await getCalendarApi(headers);
-  //   print('✅ Google Calendar API initialized');
+  //   logd('✅ Google Calendar API initialized');
 
   //   _calendarApi = calendarApi;
   //   _account = account;
@@ -228,15 +231,12 @@ class GoogleCalendarService {
   }
 
   /// Add or update a Google Calendar event from a google task
-  static Future<void> addOrUpdateEvent(
-    String calendarId,
-    List<dynamic> task,
-  ) async {
+  static Future<void> addOrUpdateEvent(String calendarId, Task task) async {
     _requireInit();
 
     try {
-      final dueDate = DateTimeUtilsHelper.parseDate(task[3]);
-      final dueTime = DateTimeUtilsHelper.parseTime(task[4]);
+      final dueDate = DateTimeUtilsHelper.parseDate(task.dueDate);
+      final dueTime = DateTimeUtilsHelper.parseTime(task.dueTime!);
       if (dueDate == null) return;
 
       final startUnflagged = DateTimeUtilsHelper.combineDateAndTime(
@@ -247,70 +247,52 @@ class GoogleCalendarService {
         startUnflagged,
       );
       final end = start.add(const Duration(minutes: 30));
-      // final exists = events.cast<Event?>().firstWhere((e) {
-      //   print(
-      //     "${e?.eventId} and -> ${task[16][1]}  ${e != null && e.eventId == task[16][1]}",
-      //   );
-      //   return e != null && e.eventId == task[16][1];
-      // }, orElse: () => null);
 
-      // if (exists != null) {
-      //   event.eventId = exists.eventId;
-      //   print("event ${event.title} already exists");
-      //   return;
-      // }
-      // print("id ${event.eventId}");
-      final events = await getEvents(calendarId);
-
-      final exists = events.cast<gcal.Event?>().firstWhere((e) {
-        print(
-          "${e?.id} and -> ${task[16][1]}  ${e != null && e.id == task[16][1]}",
-        );
-        return e != null && e.id == task[16][1];
-      }, orElse: () => null);
-
-      if (exists != null) {
-        print("event ${task[0]} already exists");
+      // If this task has already been linked to a Google event, patch it by id
+      // directly. Listing the whole ±60-day window just to find the matching
+      // id costs a full Calendar API round trip per task save, and the id we'd
+      // be searching for is already sitting in remoteEventIds[1].
+      final String knownEventId = (task.remoteEventIds[1] as String?) ?? '';
+      if (knownEventId.isNotEmpty) {
         final event = gcal.Event(
-          summary: task[0] ?? 'Untitled Task',
-          description: task[2] ?? '',
+          summary: task.name,
+          description: task.note ?? '',
           start: gcal.EventDateTime(dateTime: start, timeZone: 'UTC'),
           end: gcal.EventDateTime(dateTime: end, timeZone: 'UTC'),
-          id: task.length > 16 ? task[16][1] : null,
-          recurrence: _buildRecurrenceRule(task[7]),
+          id: knownEventId,
+          recurrence: _buildRecurrenceRule(task.repeatType),
         );
-        final result = await _calendarApi!.events.patch(
-          event,
-          calendarId,
-          exists.id!,
-          sendUpdates: "all", // "none", "externalOnly", "all"
-        );
-
-        //event.eventId = exists.id;
-        print('✅ editted event: ${result.summary}');
-        return;
+        try {
+          final result = await _calendarApi!.events.patch(
+            event,
+            calendarId,
+            knownEventId,
+            sendUpdates: "all", // "none", "externalOnly", "all"
+          );
+          logd('✅ editted event: ${result.summary}');
+          return;
+        } catch (e) {
+          // The event was deleted or moved calendars on the remote side —
+          // drop the stale link and fall through to inserting a fresh one.
+          logd('⚠️ patch of $knownEventId failed ($e); re-inserting');
+          task.remoteEventIds[1] = "";
+        }
       }
-      //print("id ${event.eventId}");
 
       final event = gcal.Event(
-        summary: task[0] ?? 'Untitled Task',
-        description: task[2] ?? '',
+        summary: task.name,
+        description: task.note ?? '',
         start: gcal.EventDateTime(dateTime: start, timeZone: 'UTC'),
         end: gcal.EventDateTime(dateTime: end, timeZone: 'UTC'),
-        recurrence: _buildRecurrenceRule(task[7]),
-        //id: task.length > 16 ? task[16][1] : null,
+        recurrence: _buildRecurrenceRule(task.repeatType),
       );
 
-      // if (task.length > 16 && task[16][1] != null) {
-      //   event.id = task[16][1];
-      // }
-
       final created = await _calendarApi!.events.insert(event, calendarId);
-      print('google==========>✅ inserted event: ${created.summary}');
-      task[16][1] = created.id;
+      logd('google==========>✅ inserted event: ${created.summary}');
+      task.remoteEventIds[1] = created.id;
     } catch (e, st) {
-      print('❌ Error adding/updating Google event: $e');
-      print(st);
+      logd('❌ Error adding/updating Google event: $e');
+      logd(st);
     }
   }
 
@@ -319,9 +301,9 @@ class GoogleCalendarService {
     _requireInit();
     try {
       await _calendarApi!.events.delete(calendarId, eventId);
-      print('🗑️ Deleted event: $eventId');
+      logd('🗑️ Deleted event: $eventId');
     } catch (e) {
-      print('❌ Error deleting Google event: $e');
+      logd('❌ Error deleting Google event: $e');
     }
   }
 
@@ -334,65 +316,66 @@ class GoogleCalendarService {
     int importedCount = 0;
     _requireInit();
     final events = await getEvents(calendarId);
-    print('🔁 Importing ${events.length} Google events');
+    logd('🔁 Importing ${events.length} Google events');
 
     for (final e in events) {
       if (e.start?.dateTime == null) continue;
 
       final start = e.start!.dateTime ?? e.start!.date?.toUtc();
-      //print("==========$start");
+      //logd("==========$start");
       final dueDate = start!.toIso8601String().split('T')[0];
       final dueTime = start.toIso8601String().split('T')[1].split('.')[0];
 
       final existingIndex = db.toDoList.indexWhere(
-        (t) => t[16][1] == e.id && t[14] == calendarId,
+        (t) => t.remoteEventIds[1] == e.id && t.localCalendarId == calendarId,
       );
       if (existingIndex != -1) {
-        db.toDoList[existingIndex][0] = e.summary ?? 'Untitled Event';
-        db.toDoList[existingIndex][2] = e.description ?? '';
-        db.toDoList[existingIndex][3] = dueDate;
-        db.toDoList[existingIndex][4] = dueTime;
-        db.toDoList[existingIndex][5] = 'None';
-        db.toDoList[existingIndex][6] = 'Low';
-        db.toDoList[existingIndex][7] = 'none';
-        db.toDoList[existingIndex][8] = 10;
-        db.toDoList[existingIndex][9] = 'none';
-        db.toDoList[existingIndex][10] = false;
-        db.toDoList[existingIndex][13] = [];
+        final t = db.toDoList[existingIndex];
+        t.name = e.summary ?? 'Untitled Event';
+        t.note = e.description ?? '';
+        t.dueDate = dueDate;
+        t.dueTime = dueTime;
+        t.category = 'None';
+        t.priority = 'Low';
+        t.repeatType = 'none';
+        t.reminderAmount = 10;
+        t.reminderType = 'none';
+        t.isStarred = false;
+        t.subtasks = [];
         updatedCount++;
-        //continue;
         continue;
       }
-      ;
 
-      db.toDoList.add([
-        e.summary ?? 'Untitled Event', //0
-        false, //1
-        e.description ?? '', //2
-        dueDate, //3
-        dueTime, //4
-        'None', //5
-        'Low', //6
-        'none', //7
-        10, //8
-        'none', //9
-        false, //10
-        DateTime.now().toUtc().toString(), //11
-        _uuid.v4(), //12
-        [], //13
-        calendarId, //14
-        e.id, //15
-        ["", e.id, ""], //16
-        _account?.displayName ?? 'google',
-        "none", //18 completed at
-        [],
-      ]);
+      db.toDoList.add(
+        Task(
+          name: e.summary ?? 'Untitled Event',
+          completed: false,
+          note: e.description ?? '',
+          dueDate: dueDate,
+          dueTime: dueTime,
+          category: 'None',
+          priority: 'Low',
+          repeatType: 'none',
+          reminderAmount: 10,
+          reminderType: 'none',
+          isStarred: false,
+          createdAt: DateTime.now().toUtc().toString(),
+          id: _uuid.v4(),
+          subtasks: [],
+          localCalendarId: calendarId,
+          localEventId: e.id ?? '',
+          remoteEventIds: ["", e.id, ""],
+          source: _account?.displayName ?? 'google',
+          completedAt: "none",
+          notificationIds: [],
+        ),
+      );
 
       importedCount++;
     }
 
     await db.updateDataBase();
-    print(
+    logd(
       '✅ Imported $importedCount events into google DB.updated $updatedCount events.',
     );
   }
@@ -402,9 +385,9 @@ class GoogleCalendarService {
     List<dynamic>? events,
     ToDoDataBase db,
   ) async {
-    print('----------------- Importing view-only events -----------------');
+    logd('----------------- Importing view-only events -----------------');
     if (events == null || events.isEmpty) {
-      print('No events to import.');
+      logd('No events to import.');
       return;
     }
 
@@ -452,59 +435,61 @@ class GoogleCalendarService {
       // Check if event already exists in DB
       final existingIndex = db.googleCalTasks.indexWhere(
         (task) =>
-            task.length > 15 &&
-            (task[14] == calendarId && task[16] == event.id),
+            task.calendarId == calendarId && task.remoteEventId == event.id,
       );
 
       if (existingIndex != -1) {
         // Update existing task
-        db.googleCalTasks[existingIndex][0] = taskDetails['taskName'];
-        db.googleCalTasks[existingIndex][2] = taskDetails['taskNote'];
-        db.googleCalTasks[existingIndex][3] = dueDate;
-        db.googleCalTasks[existingIndex][4] = dueTime;
-        db.googleCalTasks[existingIndex][5] = taskDetails['taskCategory'];
-        db.googleCalTasks[existingIndex][6] = taskDetails['taskPriority'];
-        db.googleCalTasks[existingIndex][7] = taskDetails['repeatType'];
-        db.googleCalTasks[existingIndex][8] = taskDetails['remainderAmount'];
-        db.googleCalTasks[existingIndex][9] = taskDetails['remainderType'];
-        db.googleCalTasks[existingIndex][10] = taskDetails['isStarred'];
-        db.googleCalTasks[existingIndex][13] = taskDetails['subTasks'];
+        final t = db.googleCalTasks[existingIndex];
+        t.name = taskDetails['taskName'] as String;
+        t.note = taskDetails['taskNote'] as String;
+        t.dueDate = dueDate;
+        t.dueTime = dueTime;
+        t.category = taskDetails['taskCategory'] as String;
+        t.priority = taskDetails['taskPriority'] as String;
+        t.repeatType = taskDetails['repeatType'] as String;
+        t.reminderAmount = taskDetails['remainderAmount'] as int;
+        t.reminderType = taskDetails['remainderType'] as String;
+        t.isStarred = taskDetails['isStarred'] as bool;
+        t.subtasks = [];
         updatedCount++;
-        print('✏️ Updated existing task: ${event.summary}');
+        logd('✏️ Updated existing task: ${event.summary}');
         continue;
       }
-      print("existing = $existingIndex");
+      logd("existing = $existingIndex");
 
       // Add new task
-      db.googleCalTasks.add([
-        taskDetails['taskName'],
-        false,
-        taskDetails['taskNote'],
-        dueDate,
-        dueTime,
-        taskDetails['taskCategory'],
-        taskDetails['taskPriority'],
-        taskDetails['repeatType'],
-        taskDetails['remainderAmount'],
-        taskDetails['remainderType'],
-        taskDetails['isStarred'],
-        taskDetails['createdAt'],
-        _uuid.v4(),
-        taskDetails['subTasks'],
-        taskDetails['calendarId'],
-        taskDetails['eventId'],
-        taskDetails['eventId'],
-        "google",
-        "none", //18 completed at
-      ]);
+      db.googleCalTasks.add(
+        CalendarEvent(
+          name: taskDetails['taskName'] as String,
+          completed: false,
+          note: taskDetails['taskNote'] as String,
+          dueDate: dueDate,
+          dueTime: dueTime,
+          category: taskDetails['taskCategory'] as String,
+          priority: taskDetails['taskPriority'] as String,
+          repeatType: taskDetails['repeatType'] as String,
+          reminderAmount: taskDetails['remainderAmount'] as int,
+          reminderType: taskDetails['remainderType'] as String,
+          isStarred: taskDetails['isStarred'] as bool,
+          createdAt: taskDetails['createdAt'] as String,
+          id: _uuid.v4(),
+          subtasks: [],
+          calendarId: taskDetails['calendarId'] as String,
+          eventId: taskDetails['eventId'] as String,
+          remoteEventId: taskDetails['eventId'] as String,
+          source: "google",
+          completedAt: "none",
+        ),
+      );
 
       importedCount++;
-      print('➕ Added new task: ${event.summary}');
+      logd('➕ Added new task: ${event.summary}');
     }
 
     await db.updateDataBase();
 
-    print(
+    logd(
       '✅ Imported $importedCount new events, updated $updatedCount existing ones.',
     );
   }
@@ -520,7 +505,7 @@ class GoogleCalendarService {
   //     await addOrUpdateEvent(calendarId, task);
   //     count++;
   //   }
-  //   print('📤 Synced $count tasks to Google Calendar');
+  //   logd('📤 Synced $count tasks to Google Calendar');
   // }
 
   /// Helper to ensure initialization
@@ -550,7 +535,7 @@ class GoogleCalendarService {
       //existing=calendarFromListEntry
 
       if (existing.id != null) {
-        print('✅ Calendar "ToDoList" already exists');
+        logd('✅ Calendar "ToDoList" already exists');
         return calendarFromListEntry(existing);
       }
 
@@ -561,7 +546,7 @@ class GoogleCalendarService {
             ..timeZone = 'UTC'; // adjust timezone if needed
 
       final createdCalendar = await _calendarApi!.calendars.insert(newCalendar);
-      print('✅ Created new calendar: ${createdCalendar.summary}');
+      logd('✅ Created new calendar: ${createdCalendar.summary}');
 
       // 4️⃣ Optionally add it to calendar list (so it shows up in UI)
       await _calendarApi!.calendarList.insert(
@@ -574,8 +559,8 @@ class GoogleCalendarService {
         timeZone: createdCalendar.timeZone,
       );
     } catch (e, st) {
-      print('❌ Error creating/getting calendar: $e');
-      print(st);
+      logd('❌ Error creating/getting calendar: $e');
+      logd(st);
       return null;
     }
   }
@@ -592,31 +577,31 @@ class GoogleCalendarService {
     ToDoDataBase db,
     String calendarID,
   ) async {
-    print("Sync to ------------------------------------------------");
+    logd("Sync to ------------------------------------------------");
     int count = 0;
     //final calendar = await ensureToDoListCalendar();
-    final tasksToSync = List.from(db.toDoList);
+    final tasksToSync = List<Task>.from(db.toDoList);
     for (var task in tasksToSync) {
-      if (task[17] == "repeat") continue;
+      if (task.source == "repeat") continue;
       try {
         await addOrUpdateEvent(calendarID, task);
         count++;
       } catch (e) {
-        print('❌ Failed to sync ${calendarID} "${task[0]}".');
+        logd('❌ Failed to sync ${calendarID} "${task.name}".');
       }
     }
-    print("📅 $count tasks added/updated to google calendar");
+    logd("📅 $count tasks added/updated to google calendar");
   }
 
   static Future<void> syncTasksFromCalendars(ToDoDataBase db) async {
-    print("sync from------------------------------");
+    logd("sync from------------------------------");
     final calID = db.syncToCalendars["google"];
     //db.googleCalTasks.removeWhere((t) => t[14] == calID);
     List<dynamic> events = await getEvents(calID);
     try {
       await importViewOnlyEventsToDB(events, db);
     } catch (e) {
-      print("Sync from error $e");
+      logd("Sync from error $e");
     }
   }
 

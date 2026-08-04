@@ -14,18 +14,18 @@ class SubTask {
   });
 
   Map<String, dynamic> toMap() => {
-        'name': name,
-        'dueDate': dueDate,
-        'dueTime': dueTime,
-        'completed': completed,
-      };
+    'name': name,
+    'dueDate': dueDate,
+    'dueTime': dueTime,
+    'completed': completed,
+  };
 
   factory SubTask.fromMap(Map map) => SubTask(
-        name: (map['name'] ?? '') as String,
-        dueDate: map['dueDate'] as String?,
-        dueTime: map['dueTime'] as String?,
-        completed: (map['completed'] ?? false) as bool,
-      );
+    name: (map['name'] ?? '') as String,
+    dueDate: map['dueDate'] as String?,
+    dueTime: map['dueTime'] as String?,
+    completed: (map['completed'] ?? false) as bool,
+  );
 }
 
 class SubTaskAdapter extends TypeAdapter<SubTask> {

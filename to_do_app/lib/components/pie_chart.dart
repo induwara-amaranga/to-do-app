@@ -1,9 +1,10 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:googleapis/managedkafka/v1.dart';
+import 'package:to_do_app/models/task.dart';
 
 class MyPieChart extends StatefulWidget {
-  final Map<String, List<List<dynamic>>> mappedPending;
+  final Map<String, List<Task>> mappedPending;
   final int total;
   double shade = 0;
   final Color color;

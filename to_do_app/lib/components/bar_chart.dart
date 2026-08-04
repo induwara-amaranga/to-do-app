@@ -1,8 +1,9 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:to_do_app/models/task.dart';
 
 class MyBarChart extends StatelessWidget {
-  final Map<int, List<List<dynamic>>> mappedWeek;
+  final Map<int, List<Task>> mappedWeek;
   final bool isFromMonday;
   const MyBarChart({required this.mappedWeek, required this.isFromMonday});
   @override

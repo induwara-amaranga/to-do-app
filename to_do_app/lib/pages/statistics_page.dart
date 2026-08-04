@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:to_do_app/components/bar_chart.dart';
 import 'package:to_do_app/components/pie_chart.dart';
 import 'package:to_do_app/components/task_page_bottom_nav_bar.dart';
 import 'package:to_do_app/data/database.dart';
+import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 
 class StatisticsPage extends StatefulWidget {
@@ -20,33 +20,33 @@ class _StatisticsPageState extends State<StatisticsPage> {
   late DateTime lastDate;
   int displayWeek = 0;
 
-  late List<List<dynamic>> toDoList;
-  late List<List<dynamic>> missedTasks;
-  late List<List<dynamic>> pendingTasks;
-  late List<List<dynamic>> completedTasks;
-  late List<List<dynamic>> completedPastTasks;
-  late List<List<dynamic>> pastTasks;
-  Map<String, List<List<dynamic>>> groupedByCompletedDate = {};
-  Map<int, List<List<dynamic>>> groupedWeekByCompletedDate = {};
+  late List<Task> toDoList;
+  late List<Task> missedTasks;
+  late List<Task> pendingTasks;
+  late List<Task> completedTasks;
+  late List<Task> completedPastTasks;
+  late List<Task> pastTasks;
+  Map<String, List<Task>> groupedByCompletedDate = {};
+  Map<int, List<Task>> groupedWeekByCompletedDate = {};
   List<String> selectedWeek = [];
 
-  Map<String, List<List<dynamic>>> groupedMissedTasksByPriority = {
+  Map<String, List<Task>> groupedMissedTasksByPriority = {
     'Low': [],
     'Medium': [],
     'High': [],
   };
-  Map<String, List<List<dynamic>>> groupedPendingTasksByPriority = {
+  Map<String, List<Task>> groupedPendingTasksByPriority = {
     'Low': [],
     'Medium': [],
     'High': [],
   };
-  Map<String, List<List<dynamic>>> groupedPendingTasksByCategory = {};
+  Map<String, List<Task>> groupedPendingTasksByCategory = {};
 
-  DateTime? _getUtcDateTime(List<dynamic> task) {
-    if (task[3] == null || task[3] == "0000-00-00") return null;
+  DateTime? _getUtcDateTime(Task task) {
+    if (task.dueDate == null || task.dueDate == "0000-00-00") return null;
     final combined = DateTimeUtilsHelper.combineDateAndTimeFromStrings(
-      task[3],
-      task[4],
+      task.dueDate!,
+      task.dueTime!,
     );
     return DateTime.utc(
       combined.year,
@@ -153,7 +153,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
   void initState() {
     super.initState();
     groupedPendingTasksByCategory = {
-      for (var e in widget.db.categories) e: <List<dynamic>>[],
+      for (var e in widget.db.categories) e: <Task>[],
     };
 
     toDoList = widget.db.toDoList;
@@ -161,7 +161,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         toDoList.where((task) {
           DateTime? dueDateTimeUtc = _getUtcDateTime(task);
           if (dueDateTimeUtc == null) return false;
-          return dueDateTimeUtc.isBefore(today) && task[1] == false;
+          return dueDateTimeUtc.isBefore(today) && task.completed == false;
         }).toList();
     pastTasks =
         toDoList.where((task) {
@@ -173,18 +173,18 @@ class _StatisticsPageState extends State<StatisticsPage> {
         toDoList.where((task) {
           final dueDateTimeUtc = _getUtcDateTime(task);
           if (dueDateTimeUtc == null) return false;
-          return !dueDateTimeUtc.isBefore(today) && task[1] == false;
+          return !dueDateTimeUtc.isBefore(today) && task.completed == false;
         }).toList();
-    completedTasks = toDoList.where((task) => task[1] == true).toList();
+    completedTasks = toDoList.where((task) => task.completed == true).toList();
     completedPastTasks =
         completedTasks.where((task) {
           final dueDateTimeUtc = _getUtcDateTime(task);
           if (dueDateTimeUtc == null) return false;
-          return dueDateTimeUtc.isBefore(today) && task[1] == true;
+          return dueDateTimeUtc.isBefore(today) && task.completed == true;
         }).toList();
 
     for (var task in pendingTasks) {
-      String priority = task[6];
+      String priority = task.priority;
       if (groupedPendingTasksByPriority.containsKey(priority)) {
         groupedPendingTasksByPriority[priority]!.add(task);
       } else {
@@ -192,7 +192,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
       }
     }
     for (var task in missedTasks) {
-      String priority = task[6];
+      String priority = task.priority;
       if (groupedMissedTasksByPriority.containsKey(priority)) {
         groupedMissedTasksByPriority[priority]!.add(task);
       } else {
@@ -200,7 +200,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
       }
     }
     for (var task in pendingTasks) {
-      String category = task[5];
+      String category = task.category;
       if (groupedPendingTasksByCategory.containsKey(category)) {
         groupedPendingTasksByCategory[category]!.add(task);
       } else {
@@ -208,7 +208,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
       }
     }
     for (var task in completedTasks) {
-      DateTime completedDate = DateTimeUtilsHelper.parseDateTime(task[18]);
+      DateTime completedDate = DateTimeUtilsHelper.parseDateTime(
+        task.completedAt!,
+      );
       String key = completedDate.toString();
       if (groupedByCompletedDate.containsKey(key)) {
         groupedByCompletedDate[key]!.add(task);
@@ -433,7 +435,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
     required String title,
     required String count,
     required Color countColor,
-    required Map<String, List<List<dynamic>>> priorityMap,
+    required Map<String, List<Task>> priorityMap,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -604,7 +606,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 1),
                     child: Text(
-                      '${DateFormat('MMM dd').format(firstDate)}-${DateFormat('MMM dd').format(lastDate)}',
+                      '${DateTimeUtilsHelper.displayDayMonth(firstDate, widget.db.settings)}-${DateTimeUtilsHelper.displayDayMonth(lastDate, widget.db.settings)}',
                       style: const TextStyle(
                         fontFamily: 'Manrope',
                         fontSize: 12,

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:path/path.dart' as p;
+import 'package:to_do_app/utils/log.dart';
 
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
@@ -39,7 +40,7 @@ class FileStorageService {
     final file = File(filePath);
 
     if (!await file.exists()) {
-      print("File not found: $filePath");
+      logd("File not found: $filePath");
       throw Exception("File not found: $filePath");
     }
 
@@ -65,7 +66,7 @@ class FileStorageService {
       ShareParams(files: [file], text: "Check this file!"),
     );
 
-    print(result.status); // success / dismissed / unavailable
+    logd(result.status); // success / dismissed / unavailable
   }
 
   static void deleteFile(File file) async {
@@ -79,9 +80,9 @@ class FileStorageService {
 
     // Optional: handle result
     if (result.type == ResultType.done) {
-      print("File opened successfully");
+      logd("File opened successfully");
     } else {
-      print("Error opening file: ${result.message}");
+      logd("Error opening file: ${result.message}");
     }
   }
 
@@ -93,10 +94,10 @@ class FileStorageService {
 
   //     // (Optional) Handle result
   //     if (result.status == ShareResultStatus.success) {
-  //       print("File shared successfully!");
+  //       logd("File shared successfully!");
   //     }
   //   } catch (e) {
-  //     print("Error sharing file: $e");
+  //     logd("Error sharing file: $e");
   //   }
   // }
 

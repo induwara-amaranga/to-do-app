@@ -2,19 +2,20 @@ import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:to_do_app/models/calendar_event.dart';
+import 'package:to_do_app/models/settings.dart';
 import 'package:to_do_app/models/sub_task.dart';
 import 'package:to_do_app/models/task.dart';
 
 const int kCurrentSchemaVersion = 3;
 
-/// Hybrid persistence layer.
+/// Typed persistence layer.
 /// - On disk:
 ///     • [Task] (typeId 0)            in box `tasks`
 ///     • [CalendarEvent] (typeId 2)   in boxes `localCalTasks`, `googleCalTasks`, `outlookCalTasks`
 ///     • [SubTask] (typeId 1)         embedded inside Task / CalendarEvent
-/// - In memory: kept as `List<List<dynamic>>` so legacy index-based callers
-///   (`task[5]`, `task[10]`, …) continue to work unchanged. Conversion
-///   happens at the load/save boundary.
+/// - In memory: kept as `List<Task>` / `List<CalendarEvent>` directly — the
+///   same objects Hive stores, no positional-list conversion at either
+///   boundary.
 ///
 /// Calendar events are intentionally a *separate* model from Task because
 /// their positional schema differs (single-String eventId at index 16 vs.
@@ -27,10 +28,12 @@ class ToDoDataBase {
   static const _boxOutlookCal = 'outlookCalTasks';
   static const _boxMeta = 'meta';
 
-  List<List<dynamic>> toDoList = [];
-  List<List<dynamic>> localCalTasks = [];
-  List<List<dynamic>> googleCalTasks = [];
-  List<List<dynamic>> outlookCalTasks = [];
+  static const _settingsKey = 'settings';
+
+  List<Task> toDoList = [];
+  List<CalendarEvent> localCalTasks = [];
+  List<CalendarEvent> googleCalTasks = [];
+  List<CalendarEvent> outlookCalTasks = [];
   List<String> categories = [];
   List<String> hidingCategories = [];
 
@@ -46,7 +49,7 @@ class ToDoDataBase {
     'outlook': 'none',
   };
 
-  Map<String, dynamic> settings = {'timeZone': ''};
+  AppSettings settings = const AppSettings();
 
   Box<Task> get _tasksBox => Hive.box<Task>(_boxTasks);
   Box<CalendarEvent> get _localCalBox => Hive.box<CalendarEvent>(_boxLocalCal);
@@ -101,22 +104,64 @@ class ToDoDataBase {
 
   // ─── Save ───────────────────────────────────────────────────────────────
 
-  Future<void> _replaceTaskBox(Box<Task> box, List<List<dynamic>> rows) async {
-    final typed = rows.map(Task.fromList).toList();
+  Future<void> _replaceTaskBox(Box<Task> box, List<Task> rows) async {
     await box.clear();
-    await box.addAll(typed);
+    await box.addAll(rows);
   }
 
   Future<void> _replaceCalBox(
     Box<CalendarEvent> box,
-    List<List<dynamic>> rows,
+    List<CalendarEvent> rows,
   ) async {
-    final typed = rows.map(CalendarEvent.fromList).toList();
     await box.clear();
-    await box.addAll(typed);
+    await box.addAll(rows);
   }
 
   Future<void> saveToDoList() => _replaceTaskBox(_tasksBox, toDoList);
+
+  // ─── Per-record task saves ──────────────────────────────────────────────
+  //
+  // [toDoList] is loaded as `box.values.toList()`, so list index i lines up
+  // with box index i as long as every add/remove goes through the helpers
+  // below. That lets a single-task edit write one record instead of clearing
+  // and re-adding the whole box. Each helper falls back to a full rewrite if
+  // the two ever drift out of alignment, so a missed call path degrades to
+  // the old behaviour rather than corrupting the box.
+
+  /// Persists just `toDoList[index]` — use for edits that don't change the
+  /// list's length or order (completion toggle, field edit, id backfill).
+  Future<void> saveTaskAt(int index) async {
+    if (index < 0 || index >= toDoList.length) return;
+    final box = _tasksBox;
+    if (box.length != toDoList.length) return saveToDoList();
+    await box.putAt(index, toDoList[index]);
+  }
+
+  /// Appends [task] to both the in-memory list and the box.
+  Future<void> appendTask(Task task) async {
+    toDoList.add(task);
+    final box = _tasksBox;
+    if (box.length != toDoList.length - 1) return saveToDoList();
+    await box.add(task);
+  }
+
+  /// Removes the task at [index] from both the in-memory list and the box.
+  Future<void> removeTaskAt(int index) async {
+    if (index < 0 || index >= toDoList.length) return;
+    final box = _tasksBox;
+    final aligned = box.length == toDoList.length;
+    toDoList.removeAt(index);
+    if (!aligned) return saveToDoList();
+    await box.deleteAt(index);
+  }
+
+  /// Saves the task box plus the category metadata, leaving the three
+  /// calendar boxes untouched. For mutations that only concern to-dos.
+  Future<void> saveTasksAndCategories() async {
+    await saveToDoList();
+    saveCategories();
+    saveHidingCategories();
+  }
 
   Future<void> saveLocalCalTasks() {
     if (kDebugMode) print('💾 saveLocalCalTasks: ${localCalTasks.length} rows');
@@ -129,9 +174,10 @@ class ToDoDataBase {
       _replaceCalBox(_outlookCalBox, outlookCalTasks);
 
   void saveCategories() => _metaBox.put('categories', categories);
+
   void saveHidingCategories() =>
       _metaBox.put('hidingCategories', hidingCategories);
-  void saveSettings() => _metaBox.put('settings', settings);
+  void saveSettings() => _metaBox.put('settings', settings.toMap());
   void saveSyncToCalendars() =>
       _metaBox.put('syncToCalendars', syncToCalendars);
 
@@ -177,11 +223,10 @@ class ToDoDataBase {
 
   // ─── Load ───────────────────────────────────────────────────────────────
 
-  List<List<dynamic>> _readTaskBox(Box<Task> box) =>
-      box.values.map((t) => t.toList()).toList();
+  List<Task> _readTaskBox(Box<Task> box) => box.values.toList();
 
-  List<List<dynamic>> _readCalBox(Box<CalendarEvent> box) =>
-      box.values.map((e) => e.toList()).toList();
+  List<CalendarEvent> _readCalBox(Box<CalendarEvent> box) =>
+      box.values.toList();
 
   void loadToDoList() => toDoList = _readTaskBox(_tasksBox);
   void loadLocalCalTasks() {
@@ -205,7 +250,7 @@ class ToDoDataBase {
   void loadSettings() {
     final data = _metaBox.get('settings');
     if (data is Map) {
-      settings = Map<String, dynamic>.from(data.cast<String, dynamic>());
+      settings = AppSettings.fromMap(data);
     }
   }
 
@@ -292,19 +337,19 @@ class ToDoDataBase {
     final legacyOutlook = readRows('OUTLOOK_CAL_TASKS');
 
     if (legacyToDo.isNotEmpty) {
-      toDoList = legacyToDo;
+      toDoList = legacyToDo.map(Task.fromList).toList();
       saveToDoList();
     }
     if (legacyLocal.isNotEmpty) {
-      localCalTasks = legacyLocal;
+      localCalTasks = legacyLocal.map(CalendarEvent.fromList).toList();
       saveLocalCalTasks();
     }
     if (legacyGoogle.isNotEmpty) {
-      googleCalTasks = legacyGoogle;
+      googleCalTasks = legacyGoogle.map(CalendarEvent.fromList).toList();
       saveGoogleCalTasks();
     }
     if (legacyOutlook.isNotEmpty) {
-      outlookCalTasks = legacyOutlook;
+      outlookCalTasks = legacyOutlook.map(CalendarEvent.fromList).toList();
       saveOutlookCalTasks();
     }
 
@@ -316,7 +361,7 @@ class ToDoDataBase {
 
     final s = legacy.get('SETTINGS');
     if (s is Map) {
-      settings = Map<String, dynamic>.from(s.cast<String, dynamic>());
+      settings = AppSettings.fromMap(s);
       saveSettings();
     }
 

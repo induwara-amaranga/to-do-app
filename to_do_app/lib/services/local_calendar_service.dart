@@ -2,8 +2,11 @@ import 'package:device_calendar/device_calendar.dart';
 import 'package:device_calendar/device_calendar.dart' as tz;
 import 'package:flutter/material.dart%20';
 import 'package:to_do_app/data/database.dart';
+import 'package:to_do_app/models/calendar_event.dart';
+import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 import 'package:uuid/uuid.dart';
+import 'package:to_do_app/utils/log.dart';
 
 final DeviceCalendarPlugin _deviceCalendarPlugin = DeviceCalendarPlugin(
   shouldInitTimezone: false,
@@ -31,14 +34,14 @@ class LocalCalendarService {
 
       if (permissionsGranted.isSuccess && permissionsGranted.data == true) {
         final calendarsResult = await _deviceCalendarPlugin.retrieveCalendars();
-        print('**Calendar permissions granted**');
+        logd('**Calendar permissions granted**');
 
         return calendarsResult.data ?? [];
       } else {
-        print('**Calendar permissions not granted**');
+        logd('**Calendar permissions not granted**');
       }
     } catch (e) {
-      print('Error retrieving calendars: $e');
+      logd('Error retrieving calendars: $e');
     }
     return [];
   }
@@ -57,24 +60,24 @@ class LocalCalendarService {
 
     final events = eventsResult.data ?? [];
     for (final event in events) {
-      // print('Event: ${event.title} (${event.start})');
+      // logd('Event: ${event.title} (${event.start})');
     }
     return events;
   }
 
-  static Future<void> addEvent(String calendarId, List<dynamic> task) async {
+  static Future<void> addEvent(String calendarId, Task task) async {
     try {
       // Parse due date and time
-      final dueDate = DateTimeUtilsHelper.parseDate(task[3]);
-      final dueTime = DateTimeUtilsHelper.parseDate(task[4]);
-      RecurrenceRule? recurrenceRule = _buildRecurrenceRule(task[7]);
+      final dueDate = DateTimeUtilsHelper.parseDate(task.dueDate);
+      final dueTime = DateTimeUtilsHelper.parseDate(task.dueTime);
+      RecurrenceRule? recurrenceRule = _buildRecurrenceRule(task.repeatType);
 
       if (dueDate == null) {
-        print('⚠️ Skipped: missing due date for ${task[0]}');
+        logd('⚠️ Skipped: missing due date for ${task.name}');
         return;
       }
-      print(
-        "${task[3]}  ,${task[4]}  ${DateTimeUtilsHelper.combineDateAndTime(DateTimeUtilsHelper.parseDate(task[3])!, DateTimeUtilsHelper.parseTime(task[4])!)}",
+      logd(
+        "${task.dueDate}  ,${task.dueTime}  ${DateTimeUtilsHelper.combineDateAndTime(DateTimeUtilsHelper.parseDate(task.dueDate)!, DateTimeUtilsHelper.parseTime(task.dueTime!)!)}",
       );
 
       // Build start/end as TZDateTime
@@ -83,8 +86,8 @@ class LocalCalendarService {
         tz.local,
       );
       final startCombined = DateTimeUtilsHelper.combineDateAndTime(
-        DateTimeUtilsHelper.parseDate(task[3])!,
-        DateTimeUtilsHelper.parseTime(task[4])!,
+        DateTimeUtilsHelper.parseDate(task.dueDate)!,
+        DateTimeUtilsHelper.parseTime(task.dueTime!)!,
       );
 
       final start = //start.add(const Duration(hours: 1));
@@ -98,57 +101,57 @@ class LocalCalendarService {
       final end = start.add(const Duration(minutes: 30));
 
       if (!end.isAfter(start)) {
-        print('⚠️ Adjusted end time for "${task[0]}"');
+        logd('⚠️ Adjusted end time for "${task.name}"');
         end.add(const Duration(minutes: 30));
       }
 
       final event = Event(
         calendarId,
-        title: task[0] ?? 'Untitled Task',
-        description: task[2] ?? '',
+        title: task.name,
+        description: task.note ?? '',
         start: start,
         end: end,
-        eventId: task[16][0],
+        eventId: task.remoteEventIds[0],
         recurrenceRule: recurrenceRule,
       );
-      print('event${event.start} ${event.end}');
+      logd('event${event.start} ${event.end}');
 
       // 1️⃣ Retrieve events in a small window around this time
       final events = await LocalCalendarService.getEvents(calendarId);
       //final events = eventsResult.data ?? [];
       // for (var event in events) {
-      //   print("${event.eventId}  ${event.title}");
+      //   logd("${event.eventId}  ${event.title}");
       // }
 
       // 2️⃣ Check if an event with the same title and start time exists
       // 2️⃣ Check if an event with the same ID exists
       final exists = events.cast<Event?>().firstWhere((e) {
-        print(
-          "${e?.eventId} and -> ${task[16][0]}  ${e != null && e.eventId == task[16][0]}",
+        logd(
+          "${e?.eventId} and -> ${task.remoteEventIds[0]}  ${e != null && e.eventId == task.remoteEventIds[0]}",
         );
-        return e != null && e.eventId == task[16][0];
+        return e != null && e.eventId == task.remoteEventIds[0];
       }, orElse: () => null);
 
       if (exists != null) {
         event.eventId = exists.eventId;
-        print("event ${event.title} already exists");
+        logd("event ${event.title} already exists");
         //return;
         //return;
       } else {
-        print("event ${event.title} does not exist, creating new one");
+        logd("event ${event.title} does not exist, creating new one");
         event.eventId = null; // Ensure new event is created
       }
-      print("id ${event.eventId}");
+      logd("id ${event.eventId}");
 
       final result = await _deviceCalendarPlugin.createOrUpdateEvent(event);
 
       if (result!.isSuccess && result.data != null) {
-        print(
-          'local============>✅ Event ${task[0]} created or edited:  ${result.data}',
+        logd(
+          'local============>✅ Event ${task.name} created or edited:  ${result.data}',
         );
-        task[16][0] = result.data;
+        task.remoteEventIds[0] = result.data;
       } else {
-        print(
+        logd(
           '❌ Failed to create event.task=$task Success=${result.isSuccess}, '
           'Data=${result.data}, Errors=${result.errors.toString()}',
         );
@@ -158,21 +161,21 @@ class LocalCalendarService {
         );
       }
     } catch (e, st) {
-      //print('❌ Exception while creating event: $e task=$task ');
-      print(st);
+      //logd('❌ Exception while creating event: $e task=$task ');
+      logd(st);
       throw Exception('❌ Exception while creating event: $e task=$task ');
     }
   }
 
   static Future<void> deleteEvent(String? eventId, String? calendarId) async {
-    // print("deletde$eventId")
+    // logd("deletde$eventId")
     final result = await _deviceCalendarPlugin.deleteEvent(calendarId, eventId);
 
     // 3️⃣ Handle result
     if (result.isSuccess && result.data == true) {
-      print('✅ Event deleted successfully. id ${eventId}');
+      logd('✅ Event deleted successfully. id ${eventId}');
     } else {
-      print('Failed to delete event.');
+      logd('Failed to delete event.');
     }
   }
 
@@ -180,9 +183,9 @@ class LocalCalendarService {
   //   List<dynamic>? events,
   //   ToDoDataBase db,
   // ) async {
-  //   print("-----------------importing----------------------");
+  //   logd("-----------------importing----------------------");
   //   if (events == null || events.isEmpty) {
-  //     print('No events to import.');
+  //     logd('No events to import.');
   //     return;
   //   }
 
@@ -197,10 +200,10 @@ class LocalCalendarService {
   //           task[14] == event.calendarId &&
   //           task[15] == event.eventId,
   //     );
-  //     print("${event.title}   ${event.eventId}-cal ${event.calendarId}");
+  //     logd("${event.title}   ${event.eventId}-cal ${event.calendarId}");
 
   //     if (exists) {
-  //       print('⚠️ Skipped duplicate: ${event.title}');
+  //       logd('⚠️ Skipped duplicate: ${event.title}');
   //       continue;
   //     }
 
@@ -251,16 +254,16 @@ class LocalCalendarService {
 
   //   db.updateDataBase();
   //   db.loadData();
-  //   print('✅ Imported $importedCount new events into task list.');
+  //   logd('✅ Imported $importedCount new events into task list.');
   // }
 
   static Future<void> importCalendarEventsToDB(
     List<dynamic>? events,
     ToDoDataBase db,
   ) async {
-    print("-----------------importing----------------------");
+    logd("-----------------importing----------------------");
     if (events == null || events.isEmpty) {
-      print('No events to import.');
+      logd('No events to import.');
       return;
     }
 
@@ -295,62 +298,61 @@ class LocalCalendarService {
 
       // Find if this event already exists
       final existingIndex = db.toDoList.indexWhere((task) {
-        // print(
-        //   "${task[14]} == ${event.calendarId} && ${task[15]} == ${event.eventId}",
-        // );
-
-        return task.length > 15 &&
-            (task[14] == event.calendarId && task[16][0] == event.eventId);
+        return task.localCalendarId == event.calendarId &&
+            task.remoteEventIds[0] == event.eventId;
       });
 
       if (existingIndex != -1) {
         // Update existing task
-        db.toDoList[existingIndex][0] = taskDetails['taskName'];
-        db.toDoList[existingIndex][2] = taskDetails['taskNote'];
-        db.toDoList[existingIndex][3] = taskDetails['dueDate'];
-        db.toDoList[existingIndex][4] = taskDetails['dueTime'];
-        db.toDoList[existingIndex][5] = taskDetails['taskCategory'];
-        db.toDoList[existingIndex][6] = taskDetails['taskPriority'];
-        db.toDoList[existingIndex][7] = taskDetails['repeatType'];
-        db.toDoList[existingIndex][8] = taskDetails['remainderAmount'];
-        db.toDoList[existingIndex][9] = taskDetails['remainderType'];
-        db.toDoList[existingIndex][10] = taskDetails['isStarred'];
-        db.toDoList[existingIndex][13] = taskDetails['subTasks'];
+        final t = db.toDoList[existingIndex];
+        t.name = taskDetails['taskName'] as String;
+        t.note = taskDetails['taskNote'] as String;
+        t.dueDate = taskDetails['dueDate'] as String;
+        t.dueTime = taskDetails['dueTime'] as String;
+        t.category = taskDetails['taskCategory'] as String;
+        t.priority = taskDetails['taskPriority'] as String;
+        t.repeatType = taskDetails['repeatType'] as String;
+        t.reminderAmount = taskDetails['remainderAmount'] as int;
+        t.reminderType = taskDetails['remainderType'] as String;
+        t.isStarred = taskDetails['isStarred'] as bool;
+        t.subtasks = [];
         updatedCount++;
-        print('✏️ Updated existing task: ${event.title}');
+        logd('✏️ Updated existing task: ${event.title}');
         continue;
       }
 
       // Otherwise, add new task
-      db.toDoList.add([
-        taskDetails['taskName'],
-        false,
-        taskDetails['taskNote'],
-        taskDetails['dueDate'],
-        taskDetails['dueTime'],
-        taskDetails['taskCategory'],
-        taskDetails['taskPriority'],
-        taskDetails['repeatType'],
-        taskDetails['remainderAmount'],
-        taskDetails['remainderType'],
-        taskDetails['isStarred'],
-        taskDetails['createdAt'],
-        uuid.v4(),
-        taskDetails['subTasks'],
-        taskDetails['calendarId'], // store calendar ID
-        taskDetails['eventId'],
-        [taskDetails['eventId'], "", ""],
-        "local calendar",
-        "none", //18 completed at
-        [],
-      ]);
+      db.toDoList.add(
+        Task(
+          name: taskDetails['taskName'] as String,
+          completed: false,
+          note: taskDetails['taskNote'] as String,
+          dueDate: taskDetails['dueDate'] as String,
+          dueTime: taskDetails['dueTime'] as String,
+          category: taskDetails['taskCategory'] as String,
+          priority: taskDetails['taskPriority'] as String,
+          repeatType: taskDetails['repeatType'] as String,
+          reminderAmount: taskDetails['remainderAmount'] as int,
+          reminderType: taskDetails['remainderType'] as String,
+          isStarred: taskDetails['isStarred'] as bool,
+          createdAt: taskDetails['createdAt'] as String,
+          id: uuid.v4(),
+          subtasks: [],
+          localCalendarId: taskDetails['calendarId'] as String,
+          localEventId: taskDetails['eventId'] as String,
+          remoteEventIds: [taskDetails['eventId'], "", ""],
+          source: "local calendar",
+          completedAt: "none",
+          notificationIds: [],
+        ),
+      );
 
       importedCount++;
-      print('➕ Added new task: ${event.title}');
+      logd('➕ Added new task: ${event.title}');
     }
 
     await db.updateDataBase();
-    print(
+    logd(
       '✅ Imported $importedCount new events, updated $updatedCount existing ones.',
     );
   }
@@ -359,9 +361,9 @@ class LocalCalendarService {
   //   List<dynamic>? events,
   //   ToDoDataBase db,
   // ) async {
-  //   print("-----------------importing----------------------");
+  //   logd("-----------------importing----------------------");
   //   if (events == null || events.isEmpty) {
-  //     print('No events to import.');
+  //     logd('No events to import.');
   //     return;
   //   }
 
@@ -373,10 +375,10 @@ class LocalCalendarService {
 
   //     // Parse start time into date/time strings
   //     final _start = event.start!;
-  //     print("start cal$_start");
+  //     logd("start cal$_start");
   //     DateTime start = DateTimeUtilsHelper.toUtcUsingLocal(_start);
   //     start = DateTimeUtilsHelper.toUtcUsingLocal(start);
-  //     print("Start utc $start");
+  //     logd("Start utc $start");
   //     final parts = start.toIso8601String().split('T');
   //     final dueDate = parts.first;
   //     final dueTime = parts.length > 1 ? parts[1] : '00:00:00';
@@ -426,7 +428,7 @@ class LocalCalendarService {
   //       db.localCalTasks[existingIndex][10] = taskDetails['isStarred'];
   //       db.localCalTasks[existingIndex][13] = taskDetails['subTasks'];
   //       updatedCount++;
-  //       print('✏️ Updated existing task: ${event.title}');
+  //       logd('✏️ Updated existing task: ${event.title}');
   //       continue;
   //     }
 
@@ -453,12 +455,12 @@ class LocalCalendarService {
   //     ]);
 
   //     importedCount++;
-  //     print('➕ Added new task: ${event.title}');
+  //     logd('➕ Added new task: ${event.title}');
   //   }
 
   //   db.updateDataBase();
   //   db.loadData();
-  //   print(
+  //   logd(
   //     '✅ Imported $importedCount new events, updated $updatedCount existing ones.',
   //   );
   // }
@@ -503,24 +505,24 @@ class LocalCalendarService {
     ToDoDataBase db,
     String calendarID,
   ) async {
-    print("Sync to ------------------------------------------------");
+    logd("Sync to ------------------------------------------------");
     int count = 0;
     //final calendar = await ensureToDoListCalendar();
-    final tasksToSync = List.from(db.toDoList);
+    final tasksToSync = List<Task>.from(db.toDoList);
     for (var task in tasksToSync) {
-      if (task[17] == "repeat") continue;
+      if (task.source == "repeat") continue;
       try {
         await addEvent(calendarID, task);
         count++;
       } catch (e) {
-        print('❌ Failed to sync(add) ${calendarID} "${task[0]}"  $e.');
+        logd('❌ Failed to sync(add) ${calendarID} "${task.name}"  $e.');
       }
     }
-    print("📅 $count tasks added/updated to local calendar");
+    logd("📅 $count tasks added/updated to local calendar");
   }
 
   static Future<void> syncTasksFromCalendar(ToDoDataBase db) async {
-    print("sync from------------------------------");
+    logd("sync from------------------------------");
     final calID = db.syncToCalendars["local"];
     //db.localCalTasks.removeWhere((t) => t[14] == calID);
     List<dynamic> events = await getEvents(calID);
@@ -532,9 +534,9 @@ class LocalCalendarService {
     ToDoDataBase db,
   ) async {
     db.loadData();
-    print("-----------------importing-view only---------------------");
+    logd("-----------------importing-view only---------------------");
     if (events == null || events.isEmpty) {
-      print('No events to import.');
+      logd('No events to import.');
       return;
     }
 
@@ -585,57 +587,60 @@ class LocalCalendarService {
 
       // Find if this event already exists
       final existingIndex = db.localCalTasks.indexWhere(
-        (task) => task.length > 15 && task[16] == event.eventId,
+        (task) => task.remoteEventId == event.eventId,
       );
 
       if (existingIndex != -1) {
         // Update existing task
-        db.localCalTasks[existingIndex][0] = taskDetails['taskName'];
-        db.localCalTasks[existingIndex][2] = taskDetails['taskNote'];
-        db.localCalTasks[existingIndex][3] = dueDate;
-        db.localCalTasks[existingIndex][4] = dueTime;
-        db.localCalTasks[existingIndex][5] = taskDetails['taskCategory'];
-        db.localCalTasks[existingIndex][6] = taskDetails['taskPriority'];
-        db.localCalTasks[existingIndex][7] = taskDetails['repeatType'];
-        db.localCalTasks[existingIndex][8] = taskDetails['remainderAmount'];
-        db.localCalTasks[existingIndex][9] = taskDetails['remainderType'];
-        db.localCalTasks[existingIndex][10] = taskDetails['isStarred'];
-        db.localCalTasks[existingIndex][13] = taskDetails['subTasks'];
+        final t = db.localCalTasks[existingIndex];
+        t.name = taskDetails['taskName'] as String;
+        t.note = taskDetails['taskNote'] as String;
+        t.dueDate = dueDate;
+        t.dueTime = dueTime;
+        t.category = taskDetails['taskCategory'] as String;
+        t.priority = taskDetails['taskPriority'] as String;
+        t.repeatType = taskDetails['repeatType'] as String;
+        t.reminderAmount = taskDetails['remainderAmount'] as int;
+        t.reminderType = taskDetails['remainderType'] as String;
+        t.isStarred = taskDetails['isStarred'] as bool;
+        t.subtasks = [];
         updatedCount++;
-        print('✏️ Updated existing task: ${event.title}');
+        logd('✏️ Updated existing task: ${event.title}');
         continue;
       }
 
       // Otherwise, add new task
-      db.localCalTasks.add([
-        taskDetails['taskName'],
-        false,
-        taskDetails['taskNote'],
-        dueDate,
-        dueTime,
-        taskDetails['taskCategory'],
-        taskDetails['taskPriority'],
-        taskDetails['repeatType'],
-        taskDetails['remainderAmount'],
-        taskDetails['remainderType'],
-        taskDetails['isStarred'],
-        taskDetails['createdAt'],
-        uuid.v4(),
-        taskDetails['subTasks'],
-        taskDetails['calendarId'],
-        taskDetails['eventId'],
-        taskDetails['eventId'],
-        "local",
-        "none",
-      ]);
+      db.localCalTasks.add(
+        CalendarEvent(
+          name: taskDetails['taskName'] as String,
+          completed: false,
+          note: taskDetails['taskNote'] as String,
+          dueDate: dueDate,
+          dueTime: dueTime,
+          category: taskDetails['taskCategory'] as String,
+          priority: taskDetails['taskPriority'] as String,
+          repeatType: taskDetails['repeatType'] as String,
+          reminderAmount: taskDetails['remainderAmount'] as int,
+          reminderType: taskDetails['remainderType'] as String,
+          isStarred: taskDetails['isStarred'] as bool,
+          createdAt: taskDetails['createdAt'] as String,
+          id: uuid.v4(),
+          subtasks: [],
+          calendarId: taskDetails['calendarId'] as String,
+          eventId: taskDetails['eventId'] as String,
+          remoteEventId: taskDetails['eventId'] as String,
+          source: "local",
+          completedAt: "none",
+        ),
+      );
 
       importedCount++;
-      print('➕ Added new task: ${event.title}');
+      logd('➕ Added new task: ${event.title}');
     }
 
-    print(" localCalTasks after import ${db.localCalTasks}");
+    logd(" localCalTasks after import ${db.localCalTasks}");
     await db.updateDataBase();
-    print(
+    logd(
       '✅ Imported $importedCount new events, updated $updatedCount existing ones.',
     );
   }

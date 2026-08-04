@@ -11,25 +11,25 @@ import 'package:to_do_app/models/sub_task.dart';
 ///
 /// Schema is 19 positional fields (no notification IDs slot at index 19).
 class CalendarEvent {
-  String name;          // 0
-  bool completed;       // 1
-  String? note;         // 2
-  String? dueDate;      // 3
-  String? dueTime;      // 4
-  String category;      // 5
-  String priority;      // 6
-  String? repeatType;   // 7
-  int reminderAmount;   // 8
+  String name; // 0
+  bool completed; // 1
+  String? note; // 2
+  String? dueDate; // 3
+  String? dueTime; // 4
+  String category; // 5
+  String priority; // 6
+  String? repeatType; // 7
+  int reminderAmount; // 8
   String? reminderType; // 9
-  bool isStarred;       // 10
-  String? createdAt;    // 11
-  String id;            // 12  uuid
+  bool isStarred; // 10
+  String? createdAt; // 11
+  String id; // 12  uuid
   List<SubTask> subtasks; // 13
-  String calendarId;    // 14
-  String eventId;       // 15
+  String calendarId; // 14
+  String eventId; // 15
   String remoteEventId; // 16  single String — the key difference from Task
-  String source;        // 17  google | outlook | local
-  String? completedAt;  // 18
+  String source; // 17  google | outlook | local
+  String? completedAt; // 18
 
   CalendarEvent({
     required this.name,
@@ -60,9 +60,7 @@ class CalendarEvent {
     List<SubTask> readSubs() {
       if (raw.length <= 13 || raw[13] is! List) return [];
       return (raw[13] as List)
-          .map((e) => e is SubTask
-              ? e
-              : (e is Map ? SubTask.fromMap(e) : null))
+          .map((e) => e is SubTask ? e : (e is Map ? SubTask.fromMap(e) : null))
           .whereType<SubTask>()
           .toList();
     }
@@ -76,9 +74,8 @@ class CalendarEvent {
       category: str(5) ?? 'None',
       priority: str(6) ?? 'Low',
       repeatType: str(7),
-      reminderAmount: raw.length > 8 && raw[8] is num
-          ? (raw[8] as num).toInt()
-          : 0,
+      reminderAmount:
+          raw.length > 8 && raw[8] is num ? (raw[8] as num).toInt() : 0,
       reminderType: str(9),
       isStarred: raw.length > 10 && (raw[10] == 'true' || raw[10] == true),
       createdAt: str(11),
@@ -91,28 +88,6 @@ class CalendarEvent {
       completedAt: str(18),
     );
   }
-
-  List<dynamic> toList() => [
-        name,                                       // 0
-        completed,                                  // 1
-        note,                                       // 2
-        dueDate,                                    // 3
-        dueTime,                                    // 4
-        category,                                   // 5
-        priority,                                   // 6
-        repeatType,                                 // 7
-        reminderAmount,                             // 8
-        reminderType,                               // 9
-        isStarred,                                  // 10
-        createdAt,                                  // 11
-        id,                                         // 12
-        subtasks.map((s) => s.toMap()).toList(),    // 13
-        calendarId,                                 // 14
-        eventId,                                    // 15
-        remoteEventId,                              // 16  preserved as String
-        source,                                     // 17
-        completedAt ?? 'none',                      // 18
-      ];
 }
 
 class CalendarEventAdapter extends TypeAdapter<CalendarEvent> {
@@ -152,24 +127,43 @@ class CalendarEventAdapter extends TypeAdapter<CalendarEvent> {
   void write(BinaryWriter writer, CalendarEvent obj) {
     writer.writeByte(19);
     writer
-      ..writeByte(0)..write(obj.name)
-      ..writeByte(1)..write(obj.completed)
-      ..writeByte(2)..write(obj.note)
-      ..writeByte(3)..write(obj.dueDate)
-      ..writeByte(4)..write(obj.dueTime)
-      ..writeByte(5)..write(obj.category)
-      ..writeByte(6)..write(obj.priority)
-      ..writeByte(7)..write(obj.repeatType)
-      ..writeByte(8)..write(obj.reminderAmount)
-      ..writeByte(9)..write(obj.reminderType)
-      ..writeByte(10)..write(obj.isStarred)
-      ..writeByte(11)..write(obj.createdAt)
-      ..writeByte(12)..write(obj.id)
-      ..writeByte(13)..write(obj.subtasks)
-      ..writeByte(14)..write(obj.calendarId)
-      ..writeByte(15)..write(obj.eventId)
-      ..writeByte(16)..write(obj.remoteEventId)
-      ..writeByte(17)..write(obj.source)
-      ..writeByte(18)..write(obj.completedAt);
+      ..writeByte(0)
+      ..write(obj.name)
+      ..writeByte(1)
+      ..write(obj.completed)
+      ..writeByte(2)
+      ..write(obj.note)
+      ..writeByte(3)
+      ..write(obj.dueDate)
+      ..writeByte(4)
+      ..write(obj.dueTime)
+      ..writeByte(5)
+      ..write(obj.category)
+      ..writeByte(6)
+      ..write(obj.priority)
+      ..writeByte(7)
+      ..write(obj.repeatType)
+      ..writeByte(8)
+      ..write(obj.reminderAmount)
+      ..writeByte(9)
+      ..write(obj.reminderType)
+      ..writeByte(10)
+      ..write(obj.isStarred)
+      ..writeByte(11)
+      ..write(obj.createdAt)
+      ..writeByte(12)
+      ..write(obj.id)
+      ..writeByte(13)
+      ..write(obj.subtasks)
+      ..writeByte(14)
+      ..write(obj.calendarId)
+      ..writeByte(15)
+      ..write(obj.eventId)
+      ..writeByte(16)
+      ..write(obj.remoteEventId)
+      ..writeByte(17)
+      ..write(obj.source)
+      ..writeByte(18)
+      ..write(obj.completedAt);
   }
 }

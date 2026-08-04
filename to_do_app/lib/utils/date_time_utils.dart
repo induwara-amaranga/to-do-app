@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:table_calendar/table_calendar.dart';
 import 'package:timezone/timezone.dart' as tz;
+import 'package:to_do_app/models/settings.dart';
 
 class DateTimeUtilsHelper {
   // Parse String → DateTime
@@ -123,5 +125,129 @@ class DateTimeUtilsHelper {
       time.minute,
       time.second,
     );
+  }
+
+  /// Maps the "Default Due Date" setting ("Today" | "Tomorrow" | "No default")
+  /// to an initial due date for the create-task sheet.
+  static DateTime? initialDueDateFromSetting(String setting) {
+    switch (setting) {
+      case 'Today':
+        return DateTime.now();
+      case 'Tomorrow':
+        return DateTime.now().add(const Duration(days: 1));
+      default:
+        return null;
+    }
+  }
+
+  // ── User-facing display formatting (respects Settings; never used for
+  // storage — storage always uses the fixed "yyyy-MM-dd"/"HH:mm" formats
+  // above) ─────────────────────────────────────────────────────────────
+
+  static String _numericDatePattern(String dateFormat) {
+    switch (dateFormat) {
+      case 'm/d/y':
+        return 'M/d/y';
+      case 'y/m/d':
+        return 'y/M/d';
+      case 'd/m/y':
+      default:
+        return 'd/M/y';
+    }
+  }
+
+  static String _friendlyDatePattern(String dateFormat) {
+    switch (dateFormat) {
+      case 'm/d/y':
+        return 'MMM d, yyyy';
+      case 'y/m/d':
+        return 'yyyy MMM d';
+      case 'd/m/y':
+      default:
+        return 'd MMM, yyyy';
+    }
+  }
+
+  /// Numeric day/month/year order per [AppSettings.dateFormat], e.g. "5/1/2026".
+  static String displayDateNumeric(DateTime? date, AppSettings settings) {
+    if (date == null) return '';
+    return DateFormat(_numericDatePattern(settings.dateFormat)).format(date);
+  }
+
+  /// Named-month date honoring the day/month order of [AppSettings.dateFormat],
+  /// e.g. "5 Jan, 2026" (d/m/y) vs "Jan 5, 2026" (m/d/y).
+  static String displayDateFriendly(DateTime? date, AppSettings settings) {
+    if (date == null) return '';
+    return DateFormat(_friendlyDatePattern(settings.dateFormat)).format(date);
+  }
+
+  /// Compact "MMM d" / "d MMM" (no year) for chips and other tight spaces.
+  static String displayDayMonth(DateTime date, AppSettings settings) {
+    final pattern = settings.dateFormat == 'm/d/y' ? 'MMM d' : 'd MMM';
+    return DateFormat(pattern).format(date);
+  }
+
+  static String displayMonthYear(DateTime date, AppSettings settings) {
+    final pattern = settings.dateFormat == 'y/m/d' ? 'yyyy MMMM' : 'MMMM yyyy';
+    return DateFormat(pattern).format(date);
+  }
+
+  /// 12-hour ("h:mm a") or 24-hour ("HH:mm") per [AppSettings.timeFormat].
+  static String displayTime(DateTime? time, AppSettings settings) {
+    if (time == null) return '';
+    final pattern = settings.timeFormat == '24 hour' ? 'HH:mm' : 'h:mm a';
+    return DateFormat(pattern).format(time);
+  }
+
+  /// Maps the friendly labels shown in the Time Zone picker (Settings ›
+  /// Date & Time) to a representative IANA zone id `tz.getLocation` accepts.
+  static const Map<String, String> _timeZoneLabelToIana = {
+    'UTC-12:00 (Baker Island)': 'Etc/GMT+12',
+    'UTC-11:00 (Samoa)': 'Pacific/Pago_Pago',
+    'UTC-10:00 (Hawaii)': 'Pacific/Honolulu',
+    'UTC-8:00 (Pacific Time)': 'America/Los_Angeles',
+    'UTC-7:00 (Mountain Time)': 'America/Denver',
+    'UTC-6:00 (Central Time)': 'America/Chicago',
+    'UTC-5:00 (Eastern Time)': 'America/New_York',
+    'UTC-4:00 (Atlantic Time)': 'America/Halifax',
+    'UTC-3:00 (Buenos Aires)': 'America/Argentina/Buenos_Aires',
+    'UTC+0 (London / UTC)': 'Etc/UTC',
+    'UTC+1:00 (Paris / Berlin)': 'Europe/Paris',
+    'UTC+2:00 (Cairo)': 'Africa/Cairo',
+    'UTC+3:00 (Moscow)': 'Europe/Moscow',
+    'UTC+4:00 (Dubai)': 'Asia/Dubai',
+    'UTC+5:00 (Islamabad)': 'Asia/Karachi',
+    'UTC+5:30 (Colombo / Mumbai)': 'Asia/Colombo',
+    'UTC+6:00 (Dhaka)': 'Asia/Dhaka',
+    'UTC+7:00 (Bangkok)': 'Asia/Bangkok',
+    'UTC+8:00 (Singapore / Beijing)': 'Asia/Singapore',
+    'UTC+9:00 (Tokyo / Seoul)': 'Asia/Tokyo',
+    'UTC+10:00 (Sydney)': 'Australia/Sydney',
+    'UTC+12:00 (Auckland)': 'Pacific/Auckland',
+  };
+
+  /// Resolves a manually-picked Settings timezone label (or a raw IANA id,
+  /// for values already written by auto-detection) to a [tz.Location].
+  /// Returns null if unrecognized so callers can fall back to auto-detect.
+  static tz.Location? locationFromTimeZoneLabel(String label) {
+    final iana = _timeZoneLabelToIana[label] ?? label;
+    try {
+      return tz.getLocation(iana);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Maps the "First Day of Week" setting to table_calendar's enum.
+  /// "System Default" falls back to Monday (ISO-8601 week start).
+  static StartingDayOfWeek startingDayOfWeekFromSetting(String setting) {
+    switch (setting) {
+      case 'Sunday':
+        return StartingDayOfWeek.sunday;
+      case 'Saturday':
+        return StartingDayOfWeek.saturday;
+      default:
+        return StartingDayOfWeek.monday;
+    }
   }
 }

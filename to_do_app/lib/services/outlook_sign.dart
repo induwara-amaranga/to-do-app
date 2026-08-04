@@ -1,5 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:msal_auth/msal_auth.dart';
+import 'package:to_do_app/utils/log.dart';
 
 class OutlookAuthService {
   // F-01: must match msal_config.json client_id
@@ -16,22 +17,22 @@ class OutlookAuthService {
 
   // B-02: only assign _accessToken after verification succeeds
   // static Future<bool> restoreLastSession() async {
-  //   print("🔄 Attempting to restore last Outlook session...");
+  //   logd("🔄 Attempting to restore last Outlook session...");
 
   //   try {
   //     final savedToken = await storage.read(key: 'outlook_cal_accessToken');
 
   //     if (savedToken == null) {
-  //       print("⚠️ No saved Outlook session found.");
+  //       logd("⚠️ No saved Outlook session found.");
   //       return false;
   //     }
 
-  //     print("🔐 Found saved token, verifying silently...");
+  //     logd("🔐 Found saved token, verifying silently...");
 
   //     final silentToken = await acquireTokenSilently();
 
   //     if (silentToken != null) {
-  //       print("✅ Outlook session restored silently!");
+  //       logd("✅ Outlook session restored silently!");
   //       _accessToken = silentToken;
   //       await storage.write(
   //         key: 'outlook_cal_accessToken',
@@ -42,10 +43,10 @@ class OutlookAuthService {
 
   //     // Silent failed → token expired; clear stale token
   //     _accessToken = null;
-  //     print("⚠️ Saved token invalid/expired. Need full login.");
+  //     logd("⚠️ Saved token invalid/expired. Need full login.");
   //     return false;
   //   } catch (e) {
-  //     print("❌ Error restoring Outlook session: $e");
+  //     logd("❌ Error restoring Outlook session: $e");
   //     _accessToken = null;
   //     return false;
   //   }
@@ -57,9 +58,9 @@ class OutlookAuthService {
       await _pca.signOut();
       _accessToken = null;
       await storage.delete(key: 'outlook_cal_accessToken');
-      print("✅ Signed out successfully");
+      logd("✅ Signed out successfully");
     } catch (e) {
-      print("❌ Sign-out failed: $e");
+      logd("❌ Sign-out failed: $e");
     }
   }
 
@@ -74,10 +75,10 @@ class OutlookAuthService {
       );
 
       // F-04: never log the full token
-      print("🔑 Silent token acquired");
+      logd("🔑 Silent token acquired");
       return result.accessToken;
     } catch (e) {
-      print("⚠️ Silent token failed: $e");
+      logd("⚠️ Silent token failed: $e");
       return null;
     }
   }
@@ -92,7 +93,7 @@ class OutlookAuthService {
         ),
       );
     } catch (e) {
-      print("❌init error: $e");
+      logd("❌init error: $e");
     }
   }
 
@@ -107,12 +108,12 @@ class OutlookAuthService {
       );
 
       // F-04: never log the full token
-      print('✅ Interactive sign-in succeeded');
+      logd('✅ Interactive sign-in succeeded');
       _accessToken = result.accessToken;
       await storage.write(key: 'outlook_cal_accessToken', value: _accessToken);
       return _accessToken;
     } catch (e) {
-      print("❌sign in error $e");
+      logd("❌sign in error $e");
       return null;
     }
   }
@@ -123,20 +124,20 @@ class OutlookAuthService {
     try {
       await init();
 
-      print("🔍 Trying silent sign-in...");
+      logd("🔍 Trying silent sign-in...");
       final silentToken = await acquireTokenSilently();
 
       if (silentToken != null) {
         _accessToken = silentToken;
         await storage.write(key: 'outlook_cal_accessToken', value: silentToken);
-        print("✅ Silent sign-in success");
+        logd("✅ Silent sign-in success");
         return true;
       }
 
-      print("⚠️ Silent sign-in failed — interactive sign-in required.");
+      logd("⚠️ Silent sign-in failed — interactive sign-in required.");
       return false;
     } catch (e) {
-      print("❌ initialize error: $e");
+      logd("❌ initialize error: $e");
       return false;
     }
   }

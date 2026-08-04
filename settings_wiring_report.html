@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Settings Wiring — Change Record</title>
+<style>
+  :root {
+    --paper: #F2F3F1;
+    --surface: #FFFFFF;
+    --ink: #1B2027;
+    --ink-muted: #5B6570;
+    --ink-faint: #8B9298;
+    --line: #D8DBD6;
+    --accent: #B85C2E;
+    --accent-soft: #F2E1D3;
+    --accent-ink: #7A3C1B;
+    --ok: #3C7A5D;
+    --ok-soft: #DEEEE4;
+    --warn: #9C7318;
+    --warn-soft: #F1E6C8;
+    --code-bg: #E9EBE7;
+    --shadow: 0 1px 2px rgba(27,32,39,0.06), 0 8px 24px -12px rgba(27,32,39,0.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14171A;
+      --surface: #1B1F23;
+      --ink: #E7E9E5;
+      --ink-muted: #9AA2A8;
+      --ink-faint: #6B7278;
+      --line: #2B3034;
+      --accent: #E08A52;
+      --accent-soft: #3A2A20;
+      --accent-ink: #F3C39F;
+      --ok: #6FBE97;
+      --ok-soft: #1E3329;
+      --warn: #E0B255;
+      --warn-soft: #362D19;
+      --code-bg: #21262B;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #14171A; --surface: #1B1F23; --ink: #E7E9E5; --ink-muted: #9AA2A8;
+    --ink-faint: #6B7278; --line: #2B3034; --accent: #E08A52; --accent-soft: #3A2A20;
+    --accent-ink: #F3C39F; --ok: #6FBE97; --ok-soft: #1E3329; --warn: #E0B255;
+    --warn-soft: #362D19; --code-bg: #21262B;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+  :root[data-theme="light"] {
+    --paper: #F2F3F1; --surface: #FFFFFF; --ink: #1B2027; --ink-muted: #5B6570;
+    --ink-faint: #8B9298; --line: #D8DBD6; --accent: #B85C2E; --accent-soft: #F2E1D3;
+    --accent-ink: #7A3C1B; --ok: #3C7A5D; --ok-soft: #DEEEE4; --warn: #9C7318;
+    --warn-soft: #F1E6C8; --code-bg: #E9EBE7;
+    --shadow: 0 1px 2px rgba(27,32,39,0.06), 0 8px 24px -12px rgba(27,32,39,0.18);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", system-ui, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono, .tag, .filelist, .kv, .stat-num {
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", Consolas, "Roboto Mono", monospace;
+  }
+
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  /* ── Header ───────────────────────────────────────────── */
+  .doc-head {
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 28px;
+    margin-bottom: 32px;
+  }
+  .eyebrow {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: 30px;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0 0 10px;
+    text-wrap: balance;
+    font-weight: 650;
+  }
+  .dek {
+    color: var(--ink-muted);
+    font-size: 16px;
+    line-height: 1.55;
+    max-width: 62ch;
+    margin: 0;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin-top: 18px;
+    font-size: 13px;
+    color: var(--ink-faint);
+  }
+  .meta-row span b { color: var(--ink-muted); font-weight: 600; }
+
+  /* ── Stat strip ───────────────────────────────────────── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 36px;
+  }
+  .stat {
+    background: var(--surface);
+    padding: 16px 18px;
+  }
+  .stat-num {
+    font-size: 26px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    display: block;
+    line-height: 1.1;
+  }
+  .stat-label {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    margin-top: 4px;
+  }
+
+  /* ── Verification callout ─────────────────────────────── */
+  .callout {
+    border: 1px solid var(--warn);
+    background: var(--warn-soft);
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--ink);
+    margin-bottom: 40px;
+  }
+  .callout b { color: var(--ink); }
+
+  /* ── Section / tier structure ─────────────────────────── */
+  .tier {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 0 20px;
+    margin-bottom: 44px;
+  }
+  .tier-spine {
+    position: relative;
+  }
+  .tier-spine::before {
+    content: "";
+    position: absolute;
+    top: 4px; bottom: 0; left: 10px;
+    width: 1px;
+    background: var(--line);
+  }
+  .tier-spine .dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+    position: absolute;
+    left: 6px; top: 4px;
+  }
+  .tier-head {
+    padding-top: 0;
+  }
+  .tier-label {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .tier-title {
+    font-size: 21px;
+    font-weight: 650;
+    margin: 3px 0 6px;
+    letter-spacing: -0.005em;
+  }
+  .tier-sub {
+    color: var(--ink-muted);
+    font-size: 14.5px;
+    line-height: 1.55;
+    max-width: 58ch;
+    margin: 0 0 20px;
+  }
+
+  /* ── Setting card ──────────────────────────────────────── */
+  .cards { display: flex; flex-direction: column; gap: 14px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px 0;
+  }
+  .card-title {
+    font-size: 15.5px;
+    font-weight: 650;
+    color: var(--ink);
+  }
+  .card-key {
+    font-family: ui-monospace, monospace;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    margin-left: 8px;
+    font-weight: 400;
+  }
+  .status {
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 7px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+  }
+  .status .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .status.wired { color: var(--ok); background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+  .status.wired .dot { background: var(--ok); }
+  .status.deferred { color: var(--warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+  .status.deferred .dot { background: var(--warn); }
+
+  .flow {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 10px;
+    margin: 14px 18px 4px;
+    padding: 10px 12px;
+    background: var(--code-bg);
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  .flow .before, .flow .after { line-height: 1.45; }
+  .flow .before { color: var(--ink-muted); }
+  .flow .after { color: var(--ink); }
+  .flow .arrow { color: var(--accent); font-size: 15px; }
+  .flow .lbl { font-family: ui-monospace, monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); display: block; margin-bottom: 3px; }
+
+  .reasoning {
+    padding: 12px 18px 4px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--ink);
+  }
+  .reasoning code {
+    font-size: 12.5px;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--accent-ink);
+  }
+
+  .filelist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    padding: 12px 18px 16px;
+    font-size: 11.5px;
+  }
+  .filelist span {
+    color: var(--ink-muted);
+    background: transparent;
+    border: 1px solid var(--line);
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  /* ── deferred detail ───────────────────────────────────── */
+  .deferred-block {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    padding: 16px 18px 18px;
+  }
+  .deferred-block + .deferred-block { margin-top: 14px; }
+  .deferred-block .reasoning { padding-left: 0; padding-right: 0; }
+
+  /* ── closing note ──────────────────────────────────────── */
+  .closing {
+    border-top: 1px solid var(--line);
+    padding-top: 24px;
+    margin-top: 8px;
+    font-size: 14px;
+    color: var(--ink-muted);
+    line-height: 1.6;
+  }
+  .closing b { color: var(--ink); }
+
+  a { color: var(--accent-ink); }
+
+  @media (max-width: 560px) {
+    .stats { grid-template-columns: 1fr; }
+    .tier { grid-template-columns: 14px 1fr; gap: 0 12px; }
+    .flow { grid-template-columns: 1fr; }
+    .flow .arrow { transform: rotate(90deg); justify-self: start; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="doc-head">
+    <span class="eyebrow">Change record</span>
+    <h1>Wiring Settings to Behavior</h1>
+    <p class="dek">The Settings screen already read and wrote every preference to disk. None of it did anything.
+      This is a record of which of the 25 stored settings now actually change how the app behaves, and the
+      reasoning behind each connection.</p>
+    <div class="meta-row">
+      <span><b>App</b> to_do_app (Flutter)</span>
+      <span><b>Scope</b> lib/services/notification_service.dart, lib/pages, lib/components, lib/models, main.dart</span>
+      <span><b>Static check</b> flutter analyze — 0 errors</span>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><span class="stat-num">12</span><div class="stat-label">settings wired to real behavior</div></div>
+    <div class="stat"><span class="stat-num">3</span><div class="stat-label">deferred — separate scope</div></div>
+    <div class="stat"><span class="stat-num">2</span><div class="stat-label">pre-existing bugs found &amp; fixed along the way</div></div>
+  </div>
+
+  <div class="callout">
+    <b>Verification is static only.</b> Every change compiles clean under <code>flutter analyze</code>, and each
+    piece of reasoning below was checked against the actual call sites before editing. The app has not been run
+    on a device for this pass — this machine couldn't sustain the Android/Gradle build (see closing note).
+  </div>
+
+  <!-- ══════════════════ TIER 1 ══════════════════ -->
+  <div class="tier">
+    <div class="tier-spine"><div class="dot"></div></div>
+    <div>
+      <div class="tier-head">
+        <div class="tier-label">Tier 1</div>
+        <div class="tier-title">Plumbing that already existed, just disconnected</div>
+        <p class="tier-sub">In each of these, the receiving code already accepted the input it needed — a widget
+          parameter, a notification field — nobody was passing the setting into it.</p>
+      </div>
+
+      <div class="cards">
+
+        <div class="card">
+          <div class="card-head">
+            <div><span class="card-title">Default category / reminder / due date</span><span class="card-key">defaultCategory, reminderTime, reminderType, defaultDueDate</span></div>
+            <span class="status wired"><span class="dot"></span>wired</span>
+          </div>
+          <div class="flow">
+            <div class="before"><span class="lbl">before</span>Every "Add Task" opened with category <code>None</code>, no due date, no reminder — regardless of Settings.</div>
+            <div class="arrow">→</div>
+            <div class="after"><span class="lbl">after</span><code>CreateTaskSheet</code> opens pre-filled from Settings.</div>
+          </div>
+          <div class="reasoning">
+            <code>CreateTaskSheet</code> already accepted <code>initialCategory</code>, <code>initialDueDate</code>,
+            <code>initialRemainderAmount</code>, <code>initialRemainderType</code> — the two "Add Task" call sites
+            just never passed them. Along the way I found a real landmine: Settings stores reminder type as
+            <code>"Minutes"</code> / <code>"None"</code> (UI casing), but the sheet's dropdown does an exact-match
+            against lowercase values (<code>"minutes"</code>, <code>"none"</code>). Passing the raw setting straight
+            through would have thrown a <code>DropdownButton</code> assertion the first time anyone opened Add Task.
+            Added <code>AppSettings.reminderTypeNormalized</code> to close that gap before it shipped.
+          </div>
+          <div class="filelist">
+            <span>pages/task_page.dart</span><span>pages/calendar_page.dart</span>
+            <span>models/settings.dart</span><span>utils/date_time_utils.dart</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div><span class="card-title">Completion tone &amp; animation</span><span class="card-key">completionTone, completionAnimation</span></div>
+            <span class="status wired"><span class="dot"></span>wired</span>
+          </div>
+          <div class="flow">
+            <div class="before"><span class="lbl">before</span>Checking off a task always played a sound and confetti.</div>
+            <div class="arrow">→</div>
+            <div class="after"><span class="lbl">after</span>Both are opt-out via the two toggles.</div>
+          </div>
+          <div class="reasoning">
+            <code>TaskTile</code> called <code>_playCheckSound()</code> and <code>_playStarAnimation()</code>
+            unconditionally. Added two bool params to the widget and gated the calls; threaded the settings values
+            through all three places <code>TaskTile</code> gets built (task list, calendar, filtered view). The
+            filtered-tasks screen didn't have a settings reference at all yet, so it picked up a new field passed
+            down from the app-bar filter sheet.
+          </div>
+          <div class="filelist">
+            <span>components/task_tile.dart</span><span>pages/task_page.dart</span>
+            <span>pages/calendar_page.dart</span><span>pages/filtered_tasks_page.dart</span>
+            <span>components/app_bar_options_sheet.dart</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div><span class="card-title">Lock-screen reminder</span><span class="card-key">lockScreenReminder</span></div>
+            <span class="status wired"><span class="dot"></span>wired</span>
+          </div>
+          <div class="flow">
+            <div class="before"><span class="lbl">before</span>Notification visibility was never set — left to the Android default.</div>
+            <div class="arrow">→</div>
+            <div class="after"><span class="lbl">after</span><code>NotificationVisibility.public</code> or <code>.secret</code>, per the toggle.</div>
+          </div>
+          <div class="reasoning">
+            The four notification-detail builders in <code>notificationDetails()</code> never set
+            <code>AndroidNotificationDetails.visibility</code> at all. Added a <code>showOnLockScreen</code>
+            parameter threaded down from the one place that has database access —
+            <code>scheduleInitialRemainderForTask</code> — through the scheduling call into the detail builder.
+          </div>
+          <div class="filelist"><span>services/notification_service.dart</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div><span class="card-title">First day of week</span><span class="card-key">firstDayOfWeek</span></div>
+            <span class="status wired"><span class="dot"></span>wired</span>
+          </div>
+          <div class="flow">
+            <div class="before"><span class="lbl">before</span>Calendar and date picker always started weeks on <code>table_calendar</code>'s default.</div>
+            <div class="arrow">→</div>
+            <div class="after"><span class="lbl">after</span>Both honor Sunday / Monday / Saturday / System Default.</div>
+          </div>
+          <div class="reasoning">
+            Neither <code>TableCalendar</code> instance (the Calendar page, and the date picker inside Add/Edit
+            Task) set <code>startingDayOfWeek</code>. Added one mapping helper and called it from both.
+          </div>
+          <div class="filelist">
+            <span>pages/calendar_page.dart</span><span>components/create_task_sheet.dart</span>
+            <span>utils/date_time_utils.dart</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ TIER 2 ══════════════════ -->
+  <div class="tier">
+    <div class="tier-spine"><div class="dot"></div></div>
+    <div>
+      <div class="tier-head">
+        <div class="tier-label">Tier 2</div>
+        <div class="tier-title">Needed new logic, not just a missing parameter</div>
+        <p class="tier-sub">These required understanding a platform constraint or a pre-existing design gap before
+          any code could be written.</p>
+      </div>
+
+      <div class="cards">
+
+        <div class="card">
+          <div class="card-head">
+            <div><span class="card-title">Date &amp; time display format</span><span class="card-key">dateFormat, timeFormat</span></div>
+            <span class="status wired"><span class="dot"></span>wired</span>
+          </div>
+          <div class="flow">
+            <div class="before"><span class="lbl">before</span>Six call sites each hardcoded their own <code>DateFormat('MMM d, yyyy h:mm a')</code>-style pattern.</div>
+            <div class="arrow">→</div>
+            <div class="after"><span class="lbl">after</span>One set of display helpers, all reading the two format settings.</div>
+          </div>
+          <div class="reasoning">
+            The trap here: <code>DateTimeUtilsHelper.formatDate</code> / <code>formatTime</code> are also the
+            functions used to write dates into <b>storage</b> (always <code>yyyy-MM-dd</code> / <code>HH:mm</code>,
+            regardless of what the user prefers to look at). Changing their default behavior would have quietly
+            corrupted every task's stored due date. So the fix is additive: five new <i>display-only</i> functions
+            (<code>displayDateNumeric</code>, <code>displayDateFriendly</code>, <code>displayMonthYear</code>,
+            <code>displayDayMonth</code>, <code>displayTime</code>), and a pass through every screen that shows a
+            date to a human, swapping the hardcoded pattern for the matching helper — while leaving every
+            storage-format parse call (e.g. filtered-tasks reconstructing a <code>DateTime</code> from a saved
+            row) untouched.
+          </div>
+          <div class="filelist">
+            <span>utils/date_time_utils.dart</span><span>components/task_tile.dart</span>
+            <span>components/sync_tile.dart</span><span>pages/task_page.dart</span>
+            <span>pages/filtered_tasks_page.dart</span><span>pages/statistics_page.dart</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div><span class="card-title">Notification &amp; alarm ringtone</span><span class="card-key">notifRingtone, alarmRingtone</span></div>
+            <span class="status wired"><span class="dot"></span>wired</span>
+          </div>
+          <div class="flow">
+            <div class="before"><span class="lbl">before</span>Ringtone picker (native, Kotlin side) worked and stored a real <code>content://</code> URI. Nothing read it.</div>
+            <div class="arrow">→</div>
+            <div class="after"><span class="lbl">after</span>Reminders actually play the picked tone.</div>
+          </div>
+          <div class="reasoning">
+            Android notification channels are immutable once created — a channel's sound can't be changed after
+            the fact, only replaced by a new channel. So the channel id is now derived from a hash of the ringtone
+            URI: pick a different tone and the app quietly creates a fresh channel instead of silently keeping the
+            old sound forever. Full-screen (high-priority, "alarm-like") reminders use <code>alarmRingtone</code>;
+            everything else uses <code>notifRingtone</code> — the app has no separate real alarm-scheduling path,
+            so that's the only meaningful place the two settings can diverge. Low-priority reminders are silent by
+            design (<code>playSound: false</code>) and were left alone.
+          </div>
+          <div class="filelist"><span>services/notification_service.dart</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div><span class="card-title">Time zone</span><span class="card-key">timeZoneLabel</span></div>
+            <span class="status wired"><span class="dot"></span>wired — bug fix</span>
+          </div>
+          <div class="flow">
+            <div class="before"><span class="lbl">before</span>Picking a time zone in Settings had <b>zero effect</b>.</div>
+            <div class="arrow">→</div>
+            <div class="after"><span class="lbl">after</span>A manual pick sticks across restarts.</div>
+          </div>
+          <div class="reasoning">
+            <code>main.dart</code>'s <code>initLocalTimeZone()</code> auto-detects the device zone and overwrites
+            <code>settings.timeZoneLabel</code> on <i>every</i> launch — so any manual choice was silently reverted
+            a moment later. Added a <code>timeZoneManuallySet</code> flag that tells startup to skip auto-detection.
+            That surfaced a second gap: the picker shows friendly labels like
+            <code>"UTC+5:30 (Colombo / Mumbai)"</code>, but the timezone engine needs a real IANA id like
+            <code>"Asia/Colombo"</code> — so a label→IANA lookup table was needed before "respect the manual
+            choice" could mean anything. Picking a zone now also applies immediately, not just on next launch.
+          </div>
+          <div class="filelist">
+            <span>main.dart</span><span>models/settings.dart</span>
+            <span>utils/date_time_utils.dart</span><span>pages/settings_page.dart</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div><span class="card-title">Morning plan · Evening review · Task overview</span><span class="card-key">morningPlan, eveningReview, taskOverview</span></div>
+            <span class="status wired"><span class="dot"></span>wired — new</span>
+          </div>
+          <div class="flow">
+            <div class="before"><span class="lbl">before</span>Three toggles in Settings. No scheduling code existed for any of them, at all.</div>
+            <div class="arrow">→</div>
+            <div class="after"><span class="lbl">after</span>Three daily repeating notifications, one per toggle.</div>
+          </div>
+          <div class="reasoning">
+            Each toggle now schedules (or cancels) a daily notification at a fixed time — 7:30am, 9:00pm, and
+            noon respectively, since no time-picker exists yet for any of them. Fixed notification IDs
+            (<code>900001</code>–<code>900003</code>) make rescheduling idempotent: flipping a toggle replaces
+            that one notification rather than piling up duplicates. Wired to run once at app startup and again
+            immediately whenever a Notifications setting changes, so toggling takes effect without a restart.
+          </div>
+          <div class="filelist"><span>services/notification_service.dart</span><span>main.dart</span><span>pages/settings_page.dart</span></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ DEFERRED ══════════════════ -->
+  <div class="tier">
+    <div class="tier-spine"></div>
+    <div>
+      <div class="tier-head">
+        <div class="tier-label">Not in this pass</div>
+        <div class="tier-title">Deferred, on purpose</div>
+        <p class="tier-sub">Each of these needs a feature to exist before there's anything to "wire" — flagged
+          rather than shipped half-built.</p>
+      </div>
+
+      <div class="deferred-block">
+        <div class="card-head" style="padding:0 0 8px;">
+          <div><span class="card-title">Add tasks from notification bar</span><span class="card-key">quickAddNotif</span></div>
+          <span class="status deferred"><span class="dot"></span>deferred</span>
+        </div>
+        <div class="reasoning">
+          Needs a persistent notification with a text-input action that creates a task from a background isolate
+          — without opening the app UI. That means re-initializing Hive and its adapters inside that isolate.
+          Meaningfully bigger and riskier than the other toggles, so it's called out rather than shipped as a
+          shallow version.
+        </div>
+      </div>
+      <div class="deferred-block">
+        <div class="card-head" style="padding:0 0 8px;">
+          <div><span class="card-title">Language</span><span class="card-key">language</span></div>
+          <span class="status deferred"><span class="dot"></span>deferred</span>
+        </div>
+        <div class="reasoning">
+          No <code>flutter_localizations</code> / <code>.arb</code> setup exists, and no string in the app is
+          externalized yet. This is a full i18n build-out, not a wiring task.
+        </div>
+      </div>
+      <div class="deferred-block">
+        <div class="card-head" style="padding:0 0 8px;">
+          <div><span class="card-title">Home-screen widget</span><span class="card-key">widgetStyle, widgetSize, widgetShowCompleted, widgetPriorityOnly, widgetTaskCount</span></div>
+          <span class="status deferred"><span class="dot"></span>deferred</span>
+        </div>
+        <div class="reasoning">
+          There is no home-screen widget in this app — no <code>home_widget</code> dependency, no
+          <code>AppWidgetProvider</code> in <code>MainActivity.kt</code>. These five settings currently control a
+          feature that doesn't exist.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="closing">
+    <b>On verification:</b> this machine couldn't sustain an Android/Gradle build during this session — free RAM
+    dropped as low as ~1.7GB against an 8GB Gradle heap request, and neither the Windows desktop target (no VS
+    Build Tools) nor Chrome (blocked by a <code>dart:ffi</code> dependency used elsewhere in the app) were viable
+    substitutes. Every change above is confirmed by reading the exact call site it touches and a clean
+    <code>flutter analyze</code>, but none of it has been watched running on a device yet. Worth a real smoke test
+    — toggle each setting, back out, toggle it back — once there's headroom to build.
+  </div>
+
+</div>
+</body>
+</html>

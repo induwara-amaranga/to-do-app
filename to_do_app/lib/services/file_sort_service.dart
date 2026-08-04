@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:to_do_app/utils/log.dart';
 
 import 'package:to_do_app/data/file_database_repository.dart';
 import 'package:to_do_app/models/sorting_mode.dart';
@@ -96,7 +97,7 @@ class FileSortService {
     Set<String> starredFilePaths,
   ) {
     for (var file in files) {
-      print(
+      logd(
         "File: ${p.basename(file.path)}, Starred: ${starredFilePaths.contains(file.path)}",
       );
     }

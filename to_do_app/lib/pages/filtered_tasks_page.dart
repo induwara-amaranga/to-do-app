@@ -3,15 +3,19 @@ import 'package:intl/intl.dart';
 import 'package:to_do_app/components/task_tile.dart';
 //import 'package:table_calendar/table_calendar.dart';
 import 'package:to_do_app/components/tasktile.dart';
+import 'package:to_do_app/models/settings.dart';
+import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/services/filter_tasks_service.dart';
+import 'package:to_do_app/utils/date_time_utils.dart';
 
 class Filteredtaskspage extends StatefulWidget {
   final Map<String, dynamic>? filterData;
-  final List<List<dynamic>> toDoList;
+  final List<Task> toDoList;
   final void Function(int, dynamic)? onTaskChanged;
   final Function(int, bool?)? onChanged;
   final Function(int)? deleteFunction;
   final List<String> categoryTypes;
+  final AppSettings settings;
 
   const Filteredtaskspage({
     super.key,
@@ -21,6 +25,7 @@ class Filteredtaskspage extends StatefulWidget {
     this.onTaskChanged,
     required this.filterData,
     required this.toDoList,
+    this.settings = const AppSettings(),
   });
 
   @override
@@ -31,7 +36,7 @@ class _FilteredtaskspageState extends State<Filteredtaskspage> {
   List<String> repeatTypes = ["daily", "weekly", "monthly", "yearly"];
   List<String> priorityTypes = ["Low", "Medium", "High"];
   List<String> remainderTypes = ["minutes", "hours", "days"];
-  List<List<dynamic>> filteredTasks = [];
+  List<Task> filteredTasks = [];
 
   @override
   void initState() {
@@ -84,7 +89,7 @@ class _FilteredtaskspageState extends State<Filteredtaskspage> {
               color: colorScheme.onPrimary,
             ),
             label: Text(
-              '${selectedFilter == 'Before' ? 'Before' : 'After'} ${DateFormat('MMM d').format(date)}',
+              '${selectedFilter == 'Before' ? 'Before' : 'After'} ${DateTimeUtilsHelper.displayDayMonth(date, widget.settings)}',
               style: TextStyle(
                 fontSize: 12,
                 color: colorScheme.onPrimary,
@@ -107,7 +112,7 @@ class _FilteredtaskspageState extends State<Filteredtaskspage> {
                 color: colorScheme.onPrimary,
               ),
               label: Text(
-                DateFormat('MMM d').format(date),
+                DateTimeUtilsHelper.displayDayMonth(date, widget.settings),
                 style: TextStyle(
                   fontSize: 12,
                   color: colorScheme.onPrimary,
@@ -258,37 +263,37 @@ class _FilteredtaskspageState extends State<Filteredtaskspage> {
                             final task = filteredTasks[index];
 
                             return Container(
-                              key: ValueKey(task[0] + index.toString()),
+                              key: ValueKey(task.name + index.toString()),
                               margin: const EdgeInsets.symmetric(
                                 vertical: 4,
                                 horizontal: 12,
                               ),
                               child: TaskTile(
-                                source: task[17],
+                                source: task.source,
                                 disableCompleted: () {},
                                 initialSubtasks:
-                                    task[13] != null
-                                        ? List<Map<String, dynamic>>.from(
-                                          task[13],
-                                        )
-                                        : [],
+                                    task.subtasks
+                                        .map((s) => s.toMap())
+                                        .toList(),
                                 index: widget.toDoList.indexOf(task),
-                                isStarred: task[10] == "true",
-                                taskName: task[0],
-                                taskCompleted: task[1],
-                                taskNote: task[2],
+                                isStarred: task.isStarred,
+                                taskName: task.name,
+                                taskCompleted: task.completed,
+                                taskNote: task.note ?? '',
                                 dueDate: DateFormat(
                                   'yyyy-MM-dd',
-                                ).parse(task[3]!),
+                                ).parse(task.dueDate!),
                                 dueTime:
-                                    task[4] != "00:00"
-                                        ? DateFormat("HH:mm").parse(task[4]!)
+                                    task.dueTime != "00:00"
+                                        ? DateFormat(
+                                          "HH:mm",
+                                        ).parse(task.dueTime!)
                                         : null,
-                                taskCategory: task[5],
-                                taskPriority: task[6],
-                                repeatType: task[7],
-                                remainderAmount: task[8],
-                                remainderType: task[9],
+                                taskCategory: task.category,
+                                taskPriority: task.priority,
+                                repeatType: task.repeatType!,
+                                remainderAmount: task.reminderAmount,
+                                remainderType: task.reminderType!,
                                 onChanged: (index, value) {
                                   setState(() {
                                     widget.onChanged?.call(index, value);
@@ -311,6 +316,11 @@ class _FilteredtaskspageState extends State<Filteredtaskspage> {
                                 priorityTypes: priorityTypes,
                                 remainderTypes: remainderTypes,
                                 categoryTypes: widget.categoryTypes,
+                                playCompletionTone:
+                                    widget.settings.completionTone,
+                                playCompletionAnimation:
+                                    widget.settings.completionAnimation,
+                                settings: widget.settings,
                               ),
                             );
                           },

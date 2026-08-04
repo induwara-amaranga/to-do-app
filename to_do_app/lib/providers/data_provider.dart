@@ -6,26 +6,18 @@ import 'package:to_do_app/models/task.dart';
 /// Wraps [ToDoDataBase] in a [ChangeNotifier] so widgets can react to
 /// data changes via Provider instead of receiving `db` as a constructor arg.
 ///
-/// Exposes data in two shapes:
-/// - Legacy positional `List<List<dynamic>>` (matches the in-memory format
-///   used by existing index-based code throughout the app).
-/// - Typed `List<Task>` views for new code, computed on demand.
+/// Exposes the typed lists directly (same objects [db] holds, not copies) so
+/// mutating a returned [Task]/[CalendarEvent] and calling the matching
+/// `persist*` method round-trips correctly.
 class DataProvider extends ChangeNotifier {
   final ToDoDataBase db;
   DataProvider(this.db);
 
-  // ── Legacy shape (zero-copy) ──────────────────────────────────────────
-  List<List<dynamic>> get toDoList        => db.toDoList;
-  List<List<dynamic>> get localCalTasks   => db.localCalTasks;
-  List<List<dynamic>> get googleCalTasks  => db.googleCalTasks;
-  List<List<dynamic>> get outlookCalTasks => db.outlookCalTasks;
-  List<String>        get categories      => db.categories;
-
-  // ── Typed views (allocate; use sparingly) ─────────────────────────────
-  List<Task>          get tasks         => db.toDoList.map(Task.fromList).toList();
-  List<CalendarEvent> get localEvents   => db.localCalTasks.map(CalendarEvent.fromList).toList();
-  List<CalendarEvent> get googleEvents  => db.googleCalTasks.map(CalendarEvent.fromList).toList();
-  List<CalendarEvent> get outlookEvents => db.outlookCalTasks.map(CalendarEvent.fromList).toList();
+  List<Task> get tasks => db.toDoList;
+  List<CalendarEvent> get localEvents => db.localCalTasks;
+  List<CalendarEvent> get googleEvents => db.googleCalTasks;
+  List<CalendarEvent> get outlookEvents => db.outlookCalTasks;
+  List<String> get categories => db.categories;
 
   // ── Mutations ─────────────────────────────────────────────────────────
   Future<void> persistAll() async {
@@ -41,5 +33,21 @@ class DataProvider extends ChangeNotifier {
   Future<void> persistCategories() async {
     db.saveCategories();
     notifyListeners();
+  }
+
+  Future<void> addTask(Task task) async {
+    db.toDoList.add(task);
+    await persistToDoList();
+  }
+
+  Future<void> deleteTaskAt(int index) async {
+    db.toDoList.removeAt(index);
+    await persistToDoList();
+  }
+
+  Future<void> reorderTasks(int from, int to) async {
+    final task = db.toDoList.removeAt(from);
+    db.toDoList.insert(to, task);
+    await persistToDoList();
   }
 }

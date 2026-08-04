@@ -4,7 +4,9 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:lottie/lottie.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:to_do_app/components/create_task_sheet.dart';
+import 'package:to_do_app/models/settings.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
+import 'package:to_do_app/utils/log.dart';
 
 class TaskTile extends StatefulWidget {
   final int index;
@@ -29,6 +31,9 @@ class TaskTile extends StatefulWidget {
   final List<String> remainderTypes;
   final List<String> categoryTypes;
   final List<Map<String, dynamic>>? initialSubtasks;
+  final bool playCompletionTone;
+  final bool playCompletionAnimation;
+  final AppSettings settings;
 
   const TaskTile({
     super.key,
@@ -54,6 +59,9 @@ class TaskTile extends StatefulWidget {
     this.repeatType = "daily",
     this.remainderAmount = 0,
     this.remainderType = "minutes",
+    this.playCompletionTone = true,
+    this.playCompletionAnimation = true,
+    this.settings = const AppSettings(),
   });
 
   @override
@@ -65,7 +73,11 @@ class _TaskTileState extends State<TaskTile> {
   bool _isExpanded = false;
   bool _removeTile = false;
 
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  // One shared player for every tile. A per-tile `AudioPlayer()` field holds a
+  // native audio resource for the tile's whole lifetime, and tiles are created
+  // and thrown away constantly as the list scrolls — with no dispose() to
+  // release them. Only one completion tone can be audible at a time anyway.
+  static final AudioPlayer _audioPlayer = AudioPlayer();
   bool _showStars = false;
 
   void _playCheckSound() async {
@@ -84,12 +96,11 @@ class _TaskTileState extends State<TaskTile> {
   void initState() {
     super.initState();
     _completed = widget.taskCompleted;
-    print("task tile zone : ${tz.local.name}");
+    logd("task tile zone : ${tz.local.name}");
   }
 
   @override
   Widget build(BuildContext context) {
-    print("task tile build zone: ${tz.local.name}");
     // DateTime dueDate=DateTimeUtilsHelper.parseDate(widget.dueDate);
 
     final combinedTime = DateTimeUtilsHelper.combineDateAndTime(
@@ -97,7 +108,8 @@ class _TaskTileState extends State<TaskTile> {
       widget.dueTime,
     );
     final localTime = DateTimeUtilsHelper.toLocalUsingTz(combinedTime);
-    print("$combinedTime local zone $localTime");
+    // Runs once per visible tile per frame — keep it out of release builds.
+    logd("$combinedTime local zone $localTime");
     return Center(
       child: AnimatedSize(
         //alignment: Alignment.topCenter,
@@ -185,10 +197,13 @@ class _TaskTileState extends State<TaskTile> {
                                   _completed =
                                       true; // create this local variable below
                                   _removeTile = true;
-                                  _showStars = true;
                                 });
-                                _playCheckSound();
-                                _playStarAnimation();
+                                if (widget.playCompletionTone) {
+                                  _playCheckSound();
+                                }
+                                if (widget.playCompletionAnimation) {
+                                  _playStarAnimation();
+                                }
 
                                 // 2️⃣ Wait for UI to repaint
                                 await Future.delayed(
@@ -338,7 +353,7 @@ class _TaskTileState extends State<TaskTile> {
                           ListTile(
                             leading: const Icon(Icons.calendar_today),
                             title: Text(
-                              "Due Date: ${DateTimeUtilsHelper.formatDate(localTime)}",
+                              "Due Date: ${DateTimeUtilsHelper.displayDateNumeric(localTime, widget.settings)}",
                               style: TextStyle(
                                 color: Theme.of(context).colorScheme.onSurface,
                               ),
@@ -348,7 +363,7 @@ class _TaskTileState extends State<TaskTile> {
                           ListTile(
                             leading: const Icon(Icons.access_time),
                             title: Text(
-                              "Due Time: ${DateTimeUtilsHelper.formatTime(localTime)}",
+                              "Due Time: ${DateTimeUtilsHelper.displayTime(localTime, widget.settings)}",
                               style: TextStyle(
                                 color: Theme.of(context).colorScheme.onSurface,
                               ),

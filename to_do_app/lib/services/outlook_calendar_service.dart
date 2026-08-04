@@ -3,9 +3,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:msal_auth/msal_auth.dart';
 import 'package:to_do_app/data/database.dart';
+import 'package:to_do_app/models/calendar_event.dart';
+import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/services/outlook_sign.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 import 'dart:convert';
+import 'package:to_do_app/utils/log.dart';
 
 import 'package:uuid/uuid.dart';
 
@@ -19,7 +22,7 @@ class OutlookCalendarService {
   //   //   authority:
   //   //       "https://login.microsoftonline.com/common", // use your tenant if needed
   //   // );
-  //   // print("getting token....");
+  //   // logd("getting token....");
   //   try {
   //     //   final result = await _pca.acquireToken(_scopes);
   //     //   _accessToken = result;
@@ -40,10 +43,10 @@ class OutlookCalendarService {
   //     // );
   //     await init();
   //     _accessToken = await signIn();
-  //     print("✅ Access Token: $_accessToken");
+  //     logd("✅ Access Token: $_accessToken");
   //     return true;
   //   } catch (e) {
-  //     print("❌ Sign-in failed: $e");
+  //     logd("❌ Sign-in failed: $e");
   //     return false;
   //   }
   //   //return true;
@@ -65,7 +68,7 @@ class OutlookCalendarService {
     );
 
     if (existing.isNotEmpty) {
-      print('✅ Calendar "ToDoList" already exists: ${existing['id']}');
+      logd('✅ Calendar "ToDoList" already exists: ${existing['id']}');
       return existing;
     }
 
@@ -87,11 +90,11 @@ class OutlookCalendarService {
 
     if (response.statusCode == 201) {
       final newCalendar = jsonDecode(response.body);
-      print('✅ Created new calendar "ToDoList": ${newCalendar['id']}');
+      logd('✅ Created new calendar "ToDoList": ${newCalendar['id']}');
       calendars.add(newCalendar);
       return newCalendar;
     } else {
-      print("❌ Failed to create calendar: ${response.body}");
+      logd("❌ Failed to create calendar: ${response.body}");
       return null;
     }
   }
@@ -110,14 +113,14 @@ class OutlookCalendarService {
       final data = jsonDecode(response.body);
       final List calendars = data['value'];
 
-      print("📅 Found ${calendars.length} Outlook calendars");
+      logd("📅 Found ${calendars.length} Outlook calendars");
       for (final c in calendars) {
-        print("- ${c['name']} (${c['id']})");
+        logd("- ${c['name']} (${c['id']})");
       }
 
       return calendars.cast<Map<String, dynamic>>();
     } else {
-      print("❌ Error = fetching calendars: ${response.body}");
+      logd("❌ Error = fetching calendars: ${response.body}");
       return [];
     }
   }
@@ -140,7 +143,7 @@ class OutlookCalendarService {
       final data = jsonDecode(response.body);
       return List<Map<String, dynamic>>.from(data['value']);
     } else {
-      print("❌ Error - fetching events: ${response.body}");
+      logd("❌ Error - fetching events: ${response.body}");
       return [];
     }
   }
@@ -159,10 +162,10 @@ class OutlookCalendarService {
     );
 
     if (response.statusCode == 204) {
-      print("🗑️ Event deleted successfully: $eventId");
+      logd("🗑️ Event deleted successfully: $eventId");
       return true;
     } else {
-      print(
+      logd(
         "❌ Failed to delete event: ${response.statusCode} — ${response.body}",
       );
       return false;
@@ -172,17 +175,17 @@ class OutlookCalendarService {
   /// 🔹 Add a new event or update an existing one in a calendar
   static Future<void> addOrUpdateEvent(
     String calendarId,
-    List<dynamic> eventData,
+    Task eventData,
   ) async {
     if (_accessToken == null) throw Exception('Not signed in');
-    print("add or update event to outlook called with data: $eventData");
+    logd("add or update event to outlook called with data: $eventData");
 
-    final String? eventId = eventData[16][2];
+    final String? eventId = eventData.remoteEventIds[2];
 
     // If event ID is provided → check if it exists
     bool exists = false;
     if (eventId != null) {
-      print("Checking if event exists: $eventId");
+      logd("Checking if event exists: $eventId");
       final checkUrl = Uri.parse(
         "https://graph.microsoft.com/v1.0/me/calendars/$calendarId/events/$eventId",
       );
@@ -194,10 +197,10 @@ class OutlookCalendarService {
 
       if (checkResponse.statusCode == 200) {
         final data = jsonDecode(checkResponse.body);
-        print("Event data fetched for existence check: $data");
+        logd("Event data fetched for existence check: $data");
         // Verify that the event actually belongs to your target calendar
         if (data['id'] == eventId /* && data['calendarId'] == calendarId*/ ) {
-          print("Event exists in the correct calendar");
+          logd("Event exists in the correct calendar");
           exists = true;
         }
       }
@@ -205,36 +208,36 @@ class OutlookCalendarService {
     String start = "";
     String end = "";
     try {
-      print("Preparing to add/update event: ${eventData[0]}");
+      logd("Preparing to add/update event: ${eventData.name}");
       start =
           DateTimeUtilsHelper.combineDateAndTimeFromStrings(
-            eventData[3],
-            eventData[4],
+            eventData.dueDate!,
+            eventData.dueTime!,
           ).toIso8601String();
       end =
           DateTimeUtilsHelper.combineDateAndTimeFromStrings(
-            eventData[3],
-            eventData[4],
+            eventData.dueDate!,
+            eventData.dueTime!,
           ).add(Duration(hours: 1)).toIso8601String();
-      print("Start time: $start");
-      print("End time: $end");
+      logd("Start time: $start");
+      logd("End time: $end");
     } catch (e) {
-      print("date time error: $e");
+      logd("date time error: $e");
     }
     // 1️⃣ Build event JSON body (example mapping)
     final Map<String, dynamic> eventBody = {
-      "subject": eventData[0],
+      "subject": eventData.name,
       "body": {"contentType": "HTML", "content": "Weekly status update"},
       "start": {"dateTime": start, "timeZone": "UTC"},
       "end": {"dateTime": end, "timeZone": "UTC"},
     };
-    final recurrence = _buildRecurrenceRule(eventData[7]);
+    final recurrence = _buildRecurrenceRule(eventData.repeatType);
     if (recurrence != null) {
       eventBody["recurrence"] = recurrence;
     }
 
     if (exists) {
-      print("Updating existing event: $eventId");
+      logd("Updating existing event: $eventId");
       // 🔄 Update existing event
       final updateUrl = Uri.parse(
         "https://graph.microsoft.com/v1.0/me/calendars/$calendarId/events/$eventId",
@@ -250,17 +253,17 @@ class OutlookCalendarService {
       );
 
       if (response.statusCode == 200) {
-        print("outlook==============>✅ Event updated successfully: $eventId");
-        eventData[16][2] = jsonDecode(response.body)['id'];
-        print("Updated event ID: ${eventData[16][2]}");
+        logd("outlook==============>✅ Event updated successfully: $eventId");
+        eventData.remoteEventIds[2] = jsonDecode(response.body)['id'];
+        logd("Updated event ID: ${eventData.remoteEventIds[2]}");
       } else {
-        print(
+        logd(
           "❌ Failed to update event: ${response.statusCode} — ${response.body}",
         );
       }
     } else {
       //Print();
-      print("Creating new event");
+      logd("Creating new event");
       // ➕ Create new event
       final createUrl = Uri.parse(
         "https://graph.microsoft.com/v1.0/me/calendars/$calendarId/events",
@@ -276,11 +279,11 @@ class OutlookCalendarService {
       );
 
       if (response.statusCode == 201) {
-        print("outlook=========>✅ New event created successfully");
-        eventData[16][2] = jsonDecode(response.body)['id'];
-        print("New event ID: ${eventData[16][2]}");
+        logd("outlook=========>✅ New event created successfully");
+        eventData.remoteEventIds[2] = jsonDecode(response.body)['id'];
+        logd("New event ID: ${eventData.remoteEventIds[2]}");
       } else {
-        print(
+        logd(
           "❌ Failed to create event: ${response.statusCode} — ${response.body}",
         );
       }
@@ -294,7 +297,7 @@ class OutlookCalendarService {
   ) async {
     if (_accessToken == null) throw Exception('Not signed in');
 
-    print('🔁 Fetching events from Outlook calendar: $calendarId');
+    logd('🔁 Fetching events from Outlook calendar: $calendarId');
 
     // Microsoft Graph endpoint
     final url = Uri.parse(
@@ -307,13 +310,13 @@ class OutlookCalendarService {
     );
 
     if (response.statusCode != 200) {
-      print('❌ Failed to fetch Outlook events: ${response.body}');
+      logd('❌ Failed to fetch Outlook events: ${response.body}');
       return;
     }
 
     final data = jsonDecode(response.body);
     final events = List<Map<String, dynamic>>.from(data['value']);
-    print('📅 Found ${events.length} events in Outlook');
+    logd('📅 Found ${events.length} events in Outlook');
 
     // Pre-fetch recurrence for occurrence instances (recurrence is only on the master)
     final Map<String, String> masterRepeatTypeCache = {};
@@ -344,7 +347,8 @@ class OutlookCalendarService {
 
       // Check if already exists in DB
       final existingIndex = db.toDoList.indexWhere(
-        (t) => t.length > 15 && t[16][2] == eventId && t[14] == calendarId,
+        (t) =>
+            t.remoteEventIds[2] == eventId && t.localCalendarId == calendarId,
       );
 
       final repeatType =
@@ -356,50 +360,53 @@ class OutlookCalendarService {
 
       if (existingIndex != -1) {
         // ✏️ Update existing record
-        db.toDoList[existingIndex][0] = e['subject'] ?? 'Untitled Event';
-        db.toDoList[existingIndex][2] = e['bodyPreview'] ?? '';
-        db.toDoList[existingIndex][3] = dueDate;
-        db.toDoList[existingIndex][4] = dueTime;
-        db.toDoList[existingIndex][5] = 'None';
-        db.toDoList[existingIndex][6] = 'Low';
-        db.toDoList[existingIndex][7] = repeatType;
-        db.toDoList[existingIndex][8] = 10;
-        db.toDoList[existingIndex][9] = 'none';
-        db.toDoList[existingIndex][10] = false;
-        db.toDoList[existingIndex][13] = [];
+        final t = db.toDoList[existingIndex];
+        t.name = e['subject'] ?? 'Untitled Event';
+        t.note = e['bodyPreview'] ?? '';
+        t.dueDate = dueDate;
+        t.dueTime = dueTime;
+        t.category = 'None';
+        t.priority = 'Low';
+        t.repeatType = repeatType;
+        t.reminderAmount = 10;
+        t.reminderType = 'none';
+        t.isStarred = false;
+        t.subtasks = [];
         updatedCount++;
         continue;
       }
 
       // ➕ Add new record
-      db.toDoList.add([
-        e['subject'] ?? 'Untitled Event', // 0: taskName
-        false, // 1: isCompleted
-        e['bodyPreview'] ?? '', // 2: note
-        dueDate, // 3
-        dueTime, // 4
-        'None', // 5: category
-        'Low', // 6: priority
-        repeatType, // 7: repeat
-        10, // 8: reminder amount
-        'none', // 9: reminder type
-        false, // 10: starred
-        DateTime.now().toUtc().toString(), // 11: createdAt
-        _uuid.v4(), // 12: internal ID
-        [], // 13: subTasks
-        calendarId, // 14
-        eventId, // 15
-        ["", "", eventId], // 16 duplicate id for consistency
-        "outlook", // 17 placeholder
-        "none", //18 completed at
-        [],
-      ]);
+      db.toDoList.add(
+        Task(
+          name: e['subject'] ?? 'Untitled Event',
+          completed: false,
+          note: e['bodyPreview'] ?? '',
+          dueDate: dueDate,
+          dueTime: dueTime,
+          category: 'None',
+          priority: 'Low',
+          repeatType: repeatType,
+          reminderAmount: 10,
+          reminderType: 'none',
+          isStarred: false,
+          createdAt: DateTime.now().toUtc().toString(),
+          id: _uuid.v4(),
+          subtasks: [],
+          localCalendarId: calendarId,
+          localEventId: eventId,
+          remoteEventIds: ["", "", eventId],
+          source: "outlook",
+          completedAt: "none",
+          notificationIds: [],
+        ),
+      );
       importedCount++;
     }
 
     await db.updateDataBase();
 
-    print(
+    logd(
       '✅ Imported $importedCount new events, updated $updatedCount existing ones.',
     );
   }
@@ -416,7 +423,7 @@ class OutlookCalendarService {
   ) async {
     if (_accessToken == null) throw Exception('Not signed in');
 
-    print('📥 Importing view-only events from Outlook calendar: $calendarId');
+    logd('📥 Importing view-only events from Outlook calendar: $calendarId');
 
     // Fetch events
     final url = Uri.parse(
@@ -429,14 +436,14 @@ class OutlookCalendarService {
     );
 
     if (response.statusCode != 200) {
-      print('❌ Failed to fetch view-only events: ${response.body}');
+      logd('❌ Failed to fetch view-only events: ${response.body}');
       return;
     }
 
     final data = jsonDecode(response.body);
     final events = List<Map<String, dynamic>>.from(data['value']);
 
-    print('📅 Found ${events.length} view-only events.');
+    logd('📅 Found ${events.length} view-only events.');
 
     // Pre-fetch recurrence for occurrence instances (recurrence is only on the master)
     final Map<String, String> masterRepeatTypeCache = {};
@@ -456,7 +463,7 @@ class OutlookCalendarService {
       if (e['start'] == null) continue;
 
       final startRaw = e['start']['dateTime'];
-      print('Event start raw: $startRaw');
+      logd('Event start raw: $startRaw');
       if (startRaw == null) continue;
 
       final start = DateTime.parse(startRaw).toLocal();
@@ -473,7 +480,7 @@ class OutlookCalendarService {
       // );
       // Check if already exists in DB
       final existingIndex = db.outlookCalTasks.indexWhere(
-        (t) => t.length > 15 && (t[15] == eventId && t[14] == calendarId),
+        (t) => t.eventId == eventId && t.calendarId == calendarId,
       );
 
       final repeatType =
@@ -485,50 +492,53 @@ class OutlookCalendarService {
 
       if (existingIndex != -1) {
         // ✏️ Update existing record
-        db.outlookCalTasks[existingIndex][0] = e['subject'] ?? 'Untitled Event';
-        db.outlookCalTasks[existingIndex][2] = e['bodyPreview'] ?? '';
-        db.outlookCalTasks[existingIndex][3] = dueDate;
-        db.outlookCalTasks[existingIndex][4] = dueTime;
-        db.outlookCalTasks[existingIndex][5] = 'None';
-        db.outlookCalTasks[existingIndex][6] = 'Low';
-        db.outlookCalTasks[existingIndex][7] = repeatType;
-        db.outlookCalTasks[existingIndex][8] = 10;
-        db.outlookCalTasks[existingIndex][9] = 'none';
-        db.outlookCalTasks[existingIndex][10] = false;
-        db.outlookCalTasks[existingIndex][13] = [];
+        final t = db.outlookCalTasks[existingIndex];
+        t.name = e['subject'] ?? 'Untitled Event';
+        t.note = e['bodyPreview'] ?? '';
+        t.dueDate = dueDate;
+        t.dueTime = dueTime;
+        t.category = 'None';
+        t.priority = 'Low';
+        t.repeatType = repeatType;
+        t.reminderAmount = 10;
+        t.reminderType = 'none';
+        t.isStarred = false;
+        t.subtasks = [];
         updatedCount++;
         continue;
       }
 
       // ➕ Add as read-only event (marked so user knows it’s not editable)
-      db.outlookCalTasks.add([
-        e['subject'] ?? 'Untitled Event', // 0: taskName
-        false, // 1: isCompleted
-        e['bodyPreview'] ?? '', // 2: note
-        dueDate, // 3
-        dueTime, // 4
-        'None', // 5: category
-        'Low', // 6: priority
-        repeatType, // 7: repeat
-        10, // 8: reminder
-        'none', // 9: reminder type
-        false, // 10: starred
-        DateTime.now().toUtc().toString(), // 11: createdAt
-        _uuid.v4(), // 12: internal ID
-        [], // 13: subTasks
-        calendarId, // 14
-        eventId, // 15: Outlook event ID
-        eventId, // 16: duplicate for consistency
-        "outlook", // 17: mark as read-only
-        "none", //18 completed at
-      ]);
+      db.outlookCalTasks.add(
+        CalendarEvent(
+          name: e['subject'] ?? 'Untitled Event',
+          completed: false,
+          note: e['bodyPreview'] ?? '',
+          dueDate: dueDate,
+          dueTime: dueTime,
+          category: 'None',
+          priority: 'Low',
+          repeatType: repeatType,
+          reminderAmount: 10,
+          reminderType: 'none',
+          isStarred: false,
+          createdAt: DateTime.now().toUtc().toString(),
+          id: _uuid.v4(),
+          subtasks: [],
+          calendarId: calendarId,
+          eventId: eventId,
+          remoteEventId: eventId,
+          source: "outlook",
+          completedAt: "none",
+        ),
+      );
 
       importedCount++;
     }
 
     await db.updateDataBase();
 
-    print(
+    logd(
       '✅ Imported $importedCount view-only events, updated $updatedCount existing ones.',
     );
   }
@@ -537,31 +547,31 @@ class OutlookCalendarService {
     ToDoDataBase db,
     String calendarID,
   ) async {
-    print("Sync to ------------------------------------------------");
+    logd("Sync to ------------------------------------------------");
     int count = 0;
     //final calendar = await ensureToDoListCalendar();
-    final tasksToSync = List.from(db.toDoList);
+    final tasksToSync = List<Task>.from(db.toDoList);
     for (var task in tasksToSync) {
-      if (task[17] == "repeat") continue;
+      if (task.source == "repeat") continue;
       try {
         await addOrUpdateEvent(calendarID, task);
         count++;
       } catch (e) {
-        print('❌ Failed to sync to ${calendarID} task :"${task[0]}".');
+        logd('❌ Failed to sync to ${calendarID} task :"${task.name}".');
       }
     }
-    print("📅 $count tasks added/updated to outlook calendar");
+    logd("📅 $count tasks added/updated to outlook calendar");
   }
 
   static Future<void> syncTasksFromCalendar(ToDoDataBase db) async {
-    print("sync from------------------------------");
+    logd("sync from------------------------------");
     final calID = db.syncToCalendars["outlook"];
     //db.outlookCalTasks.removeWhere((t) => t[14] == calID);
     //List<dynamic> events = await getEvents(calID);
     try {
       await importViewOnlyEventsToDB(calID, db);
     } catch (e) {
-      print("Sync from error $e");
+      logd("Sync from error $e");
     }
   }
 
@@ -581,13 +591,13 @@ class OutlookCalendarService {
         );
       }
     } catch (e) {
-      print('Failed to fetch master event recurrence: $e');
+      logd('Failed to fetch master event recurrence: $e');
     }
     return 'none';
   }
 
   static String _repeatTypeFromRecurrence(Map<String, dynamic>? recurrence) {
-    print("Determining repeat type from recurrence: $recurrence");
+    logd("Determining repeat type from recurrence: $recurrence");
     if (recurrence == null) return 'none';
     final type = recurrence['pattern']?['type'] as String?;
     switch (type?.toLowerCase()) {

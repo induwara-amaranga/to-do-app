@@ -32,6 +32,7 @@ class CreateTaskSheet extends StatefulWidget {
   final String initialRepeatType;
   final int initialRemainderAmount;
   final String initialRemainderType;
+  final String firstDayOfWeek;
 
   const CreateTaskSheet({
     super.key,
@@ -44,6 +45,7 @@ class CreateTaskSheet extends StatefulWidget {
     this.initialRepeatType = "daily",
     this.initialRemainderAmount = 0,
     this.initialRemainderType = "minutes",
+    this.firstDayOfWeek = "System Default",
     required this.taskName,
     required this.taskNote,
     required this.initialSubtasks,
@@ -420,6 +422,10 @@ class _CreateTaskSheetState extends State<CreateTaskSheet> {
 
                         // --- calendar ---
                         TableCalendar(
+                          startingDayOfWeek:
+                              DateTimeUtilsHelper.startingDayOfWeekFromSetting(
+                                widget.firstDayOfWeek,
+                              ),
                           focusedDay: _selectedDueDate ?? DateTime.now(),
                           firstDay: DateTime.utc(1969, 1, 1),
                           lastDay: DateTime.utc(2100, 1, 1),
