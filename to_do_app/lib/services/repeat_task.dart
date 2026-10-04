@@ -25,7 +25,7 @@ class RepeatTask {
   }
 
   // Create all pending repeated tasks if their due date(s) have passed
-  static void createPendingRepeatTasks(
+  static Future<void> createPendingRepeatTasks(
     ToDoDataBase db,
     BuildContext context,
   ) async {
@@ -39,6 +39,7 @@ class RepeatTask {
     // task; scanning the whole task list inside each one made the backfill
     // O(missed occurrences × task count).
     final existingKeys = _existingOccurrences(db);
+    final firstNewIndex = db.toDoList.length;
 
     for (var task in originalTasks) {
       // Skip if task has no repeat type
@@ -70,8 +71,8 @@ class RepeatTask {
       }
     }
 
-    // Only the task list changed — no need to rewrite the calendar boxes.
-    db.saveToDoList();
+    // Write only the occurrences just created, not the whole box.
+    await db.saveTasksFrom(firstNewIndex);
   }
 
   // Private helper to create the next repeat task
@@ -220,7 +221,7 @@ class RepeatTask {
     if (alreadyExists) return;
 
     // Add the new repeated task
-    db.toDoList.add(
+    await db.appendTask(
       Task(
         name: task.name,
         completed: false,
@@ -245,8 +246,6 @@ class RepeatTask {
       ),
     );
 
-    // Only the task list changed.
-    db.saveToDoList();
     if (task.reminderAmount >= 0) {
       DateTime? dueTime = DateTimeUtilsHelper.parseTime(task.dueTime!);
       if (dueTime != null) {

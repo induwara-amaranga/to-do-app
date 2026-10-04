@@ -13,6 +13,22 @@ class DataProvider extends ChangeNotifier {
   final ToDoDataBase db;
   DataProvider(this.db);
 
+  int _taskRevision = 0;
+
+  /// Bumped whenever the task list changes. Widgets that only need to react
+  /// to task changes should `select` this (see TaskPage) so they rebuild on a
+  /// toggle, edit, delete or reorder without dragging the rest of the screen
+  /// (drawer, FAB, nav bar) along.
+  int get taskRevision => _taskRevision;
+
+  /// Call after mutating `db.toDoList` outside the helpers below.
+  void markTasksChanged() {
+    _taskRevision++;
+    // Also invalidates anything cached against the database itself.
+    db.dataRevision++;
+    notifyListeners();
+  }
+
   List<Task> get tasks => db.toDoList;
   List<CalendarEvent> get localEvents => db.localCalTasks;
   List<CalendarEvent> get googleEvents => db.googleCalTasks;
@@ -22,12 +38,12 @@ class DataProvider extends ChangeNotifier {
   // ── Mutations ─────────────────────────────────────────────────────────
   Future<void> persistAll() async {
     await db.updateDataBase();
-    notifyListeners();
+    markTasksChanged();
   }
 
   Future<void> persistToDoList() async {
     await db.saveToDoList();
-    notifyListeners();
+    markTasksChanged();
   }
 
   Future<void> persistCategories() async {
@@ -36,18 +52,17 @@ class DataProvider extends ChangeNotifier {
   }
 
   Future<void> addTask(Task task) async {
-    db.toDoList.add(task);
-    await persistToDoList();
+    await db.appendTask(task);
+    markTasksChanged();
   }
 
   Future<void> deleteTaskAt(int index) async {
-    db.toDoList.removeAt(index);
-    await persistToDoList();
+    await db.removeTaskAt(index);
+    markTasksChanged();
   }
 
   Future<void> reorderTasks(int from, int to) async {
-    final task = db.toDoList.removeAt(from);
-    db.toDoList.insert(to, task);
-    await persistToDoList();
+    await db.moveTask(from, to);
+    markTasksChanged();
   }
 }

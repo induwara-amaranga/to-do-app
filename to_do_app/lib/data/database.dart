@@ -4,6 +4,7 @@ import 'package:to_do_app/models/calendar_event.dart';
 import 'package:to_do_app/models/settings.dart';
 import 'package:to_do_app/models/sub_task.dart';
 import 'package:to_do_app/models/task.dart';
+import 'package:uuid/uuid.dart';
 
 const int kCurrentSchemaVersion = 3;
 
@@ -26,6 +27,7 @@ class ToDoDataBase {
   static const _boxGoogleCal = 'googleCalTasks';
   static const _boxOutlookCal = 'outlookCalTasks';
   static const _boxMeta = 'meta';
+  static const _boxLegacy = 'mybox';
 
   static const _settingsKey = 'settings';
 
@@ -49,6 +51,11 @@ class ToDoDataBase {
   };
 
   AppSettings settings = const AppSettings();
+
+  /// Bumped by every write to the task or calendar boxes. Screens and caches
+  /// compare it with the value they last saw to know their data went stale
+  /// (e.g. a page left on the back stack while another page edited tasks).
+  int dataRevision = 0;
 
   Box<Task> get _tasksBox => Hive.box<Task>(_boxTasks);
   Box<CalendarEvent> get _localCalBox => Hive.box<CalendarEvent>(_boxLocalCal);
@@ -86,11 +93,22 @@ class ToDoDataBase {
       await Hive.deleteBoxFromDisk(_boxOutlookCal);
     }
 
-    await Hive.openBox<Task>(_boxTasks);
-    await Hive.openBox<CalendarEvent>(_boxLocalCal);
-    await Hive.openBox<CalendarEvent>(_boxGoogleCal);
-    await Hive.openBox<CalendarEvent>(_boxOutlookCal);
-    await Hive.openBox('fileMetaBox');
+    // The pre-typed-model box is only needed for the one-time migration, so
+    // don't open (or create) it on every launch.
+    final needsLegacy =
+        stored < 2 &&
+        !Hive.isBoxOpen(_boxLegacy) &&
+        await Hive.boxExists(_boxLegacy);
+
+    await Future.wait([
+      Hive.openBox<Task>(_boxTasks),
+      Hive.openBox<CalendarEvent>(_boxLocalCal),
+      Hive.openBox<CalendarEvent>(_boxGoogleCal),
+      Hive.openBox<CalendarEvent>(_boxOutlookCal),
+      Hive.openBox('fileMetaBox'),
+      if (needsLegacy) Hive.openBox(_boxLegacy),
+    ]);
+    await _migrateTaskKeys();
   }
 
   void createInitialData() {
@@ -103,55 +121,173 @@ class ToDoDataBase {
 
   // ─── Save ───────────────────────────────────────────────────────────────
 
-  Future<void> _replaceTaskBox(Box<Task> box, List<Task> rows) async {
-    await box.clear();
-    await box.addAll(rows);
-  }
-
-  Future<void> _replaceCalBox(
-    Box<CalendarEvent> box,
-    List<CalendarEvent> rows,
-  ) async {
-    await box.clear();
-    await box.addAll(rows);
-  }
-
-  Future<void> saveToDoList() => _replaceTaskBox(_tasksBox, toDoList);
-
-  // ─── Per-record task saves ──────────────────────────────────────────────
+  // ─── Task storage ───────────────────────────────────────────────────────
   //
-  // [toDoList] is loaded as `box.values.toList()`, so list index i lines up
-  // with box index i as long as every add/remove goes through the helpers
-  // below. That lets a single-task edit write one record instead of clearing
-  // and re-adding the whole box. Each helper falls back to a full rewrite if
-  // the two ever drift out of alignment, so a missed call path degrades to
-  // the old behaviour rather than corrupting the box.
+  // Tasks are stored under their own `id` and each carries an `order` number;
+  // [toDoList] is the box sorted by `order`. Nothing depends on a task's
+  // position in the box, so every edit below is a single-record write:
+  //   * edit / toggle  -> put(id)
+  //   * append         -> put(id) with order = last + 1
+  //   * delete         -> delete(id)
+  //   * undo-delete / drag-reorder -> put(id) with an order halfway between
+  //     its new neighbours (fractional, so there is always room)
+  // Only when a gap is exhausted (or orders were left inconsistent by code
+  // that edits [toDoList] directly) does a write fall back to renumbering the
+  // whole box, which is also what [saveToDoList] does.
+
+  static const _uuid = Uuid();
+
+  /// Gives every task a unique, non-empty id and `order = position`.
+  void _normalizeTasks(List<Task> rows) {
+    final seen = <String>{};
+    for (var i = 0; i < rows.length; i++) {
+      final t = rows[i];
+      if (t.id.isEmpty || !seen.add(t.id)) {
+        t.id = _uuid.v4();
+        seen.add(t.id);
+      }
+      t.order = i.toDouble();
+    }
+  }
+
+  Future<void> _replaceTaskBox(Box<Task> box, List<Task> rows) async {
+    dataRevision++;
+    _normalizeTasks(rows);
+    await box.clear();
+    await box.putAll({for (final t in rows) t.id: t});
+  }
+
+  /// Early versions stored tasks under auto-increment int keys, where list
+  /// position was the key. Re-keys them by id once, keeping their order.
+  Future<void> _migrateTaskKeys() async {
+    final box = _tasksBox;
+    if (!box.keys.any((k) => k is! String)) return;
+    await _replaceTaskBox(box, box.values.toList());
+  }
+
+  /// True if `toDoList[index].order` already sits strictly between its
+  /// neighbours' orders.
+  bool _orderFits(int index) {
+    final o = toDoList[index].order;
+    if (index > 0 && o <= toDoList[index - 1].order) return false;
+    if (index < toDoList.length - 1 && o >= toDoList[index + 1].order) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Sets `toDoList[index].order` to fall between its neighbours. Returns
+  /// false when there is no room (the caller then renumbers everything).
+  bool _assignOrderAt(int index) {
+    final prev = index > 0 ? toDoList[index - 1].order : null;
+    final next = index < toDoList.length - 1 ? toDoList[index + 1].order : null;
+    final double o;
+    if (prev == null && next == null) {
+      o = 0;
+    } else if (prev == null) {
+      o = next! - 1;
+    } else if (next == null) {
+      o = prev + 1;
+    } else {
+      if (prev >= next) return false;
+      o = (prev + next) / 2;
+      if (!(o > prev && o < next)) return false;
+    }
+    toDoList[index].order = o;
+    return true;
+  }
+
+  /// Writes `toDoList[index]` alone, first giving it an order that fits (or
+  /// renumbering the box if none does).
+  Future<void> _putTaskAt(int index) async {
+    dataRevision++;
+    final task = toDoList[index];
+    if (task.id.isEmpty) task.id = _uuid.v4();
+    if (!_orderFits(index) && !_assignOrderAt(index)) return saveToDoList();
+    await _tasksBox.put(task.id, task);
+  }
+
+  /// Replaces the whole task box with [toDoList], in list order. Use for bulk
+  /// changes; single edits have the cheaper helpers below.
+  Future<void> saveToDoList() => _replaceTaskBox(_tasksBox, toDoList);
 
   /// Persists just `toDoList[index]` — use for edits that don't change the
   /// list's length or order (completion toggle, field edit, id backfill).
   Future<void> saveTaskAt(int index) async {
     if (index < 0 || index >= toDoList.length) return;
-    final box = _tasksBox;
-    if (box.length != toDoList.length) return saveToDoList();
-    await box.putAt(index, toDoList[index]);
+    await _putTaskAt(index);
   }
 
   /// Appends [task] to both the in-memory list and the box.
   Future<void> appendTask(Task task) async {
     toDoList.add(task);
-    final box = _tasksBox;
-    if (box.length != toDoList.length - 1) return saveToDoList();
-    await box.add(task);
+    await _putTaskAt(toDoList.length - 1);
+  }
+
+  /// Writes the tasks at [indexes] in one batch — for code that edited
+  /// several existing tasks in place (calendar imports).
+  Future<void> saveTasksAt(Iterable<int> indexes) async {
+    final rows = <String, Task>{};
+    for (final i in indexes) {
+      if (i < 0 || i >= toDoList.length) continue;
+      final t = toDoList[i];
+      if (t.id.isEmpty) t.id = _uuid.v4();
+      if (!_orderFits(i) && !_assignOrderAt(i)) return saveToDoList();
+      rows[t.id] = t;
+    }
+    if (rows.isEmpty) return;
+    dataRevision++;
+    await _tasksBox.putAll(rows);
+  }
+
+  /// Writes the tasks from index [start] to the end of [toDoList] — for code
+  /// that has just appended several to the list directly.
+  Future<void> saveTasksFrom(int start) async {
+    if (start >= toDoList.length) return;
+    dataRevision++;
+    final fresh = <String, Task>{};
+    for (var i = start; i < toDoList.length; i++) {
+      final t = toDoList[i];
+      if (t.id.isEmpty) t.id = _uuid.v4();
+      // The tail is the end of the list, so each task simply follows the one
+      // before it.
+      t.order = i > 0 ? toDoList[i - 1].order + 1 : 0;
+      fresh[t.id] = t;
+    }
+    await _tasksBox.putAll(fresh);
   }
 
   /// Removes the task at [index] from both the in-memory list and the box.
   Future<void> removeTaskAt(int index) async {
     if (index < 0 || index >= toDoList.length) return;
-    final box = _tasksBox;
-    final aligned = box.length == toDoList.length;
-    toDoList.removeAt(index);
-    if (!aligned) return saveToDoList();
-    await box.deleteAt(index);
+    dataRevision++;
+    final task = toDoList.removeAt(index);
+    await _tasksBox.delete(task.id);
+  }
+
+  /// Removes every task in [doomed] from the list and the box in one batch.
+  Future<void> removeTasks(Iterable<Task> doomed) async {
+    final set = Set<Task>.identity()..addAll(doomed);
+    if (set.isEmpty) return;
+    dataRevision++;
+    toDoList.removeWhere(set.contains);
+    await _tasksBox.deleteAll(set.map((t) => t.id));
+  }
+
+  /// Puts [task] back at [index] (clamped), e.g. when a delete is undone.
+  Future<void> insertTaskAt(int index, Task task) async {
+    final at = index.clamp(0, toDoList.length);
+    toDoList.insert(at, task);
+    await _putTaskAt(at);
+  }
+
+  /// Moves the task at [from] so it ends up at index [to].
+  Future<void> moveTask(int from, int to) async {
+    if (from < 0 || from >= toDoList.length || from == to) return;
+    final task = toDoList.removeAt(from);
+    final at = to.clamp(0, toDoList.length);
+    toDoList.insert(at, task);
+    await _putTaskAt(at);
   }
 
   /// Saves the task box plus the category metadata, leaving the three
@@ -160,6 +296,15 @@ class ToDoDataBase {
     await saveToDoList();
     saveCategories();
     saveHidingCategories();
+  }
+
+  Future<void> _replaceCalBox(
+    Box<CalendarEvent> box,
+    List<CalendarEvent> rows,
+  ) async {
+    dataRevision++;
+    await box.clear();
+    await box.addAll(rows);
   }
 
   Future<void> saveLocalCalTasks() {
@@ -190,21 +335,25 @@ class ToDoDataBase {
   // ─── Clear ──────────────────────────────────────────────────────────────
 
   Future<void> clearToDoList() async {
+    dataRevision++;
     toDoList = [];
     await _tasksBox.clear();
   }
 
   Future<void> clearLocalCalTasks() async {
+    dataRevision++;
     localCalTasks = [];
     await _localCalBox.clear();
   }
 
   Future<void> clearGoogleCalTasks() async {
+    dataRevision++;
     googleCalTasks = [];
     await _googleCalBox.clear();
   }
 
   Future<void> clearOutlookCalTasks() async {
+    dataRevision++;
     outlookCalTasks = [];
     await _outlookCalBox.clear();
   }
@@ -217,7 +366,15 @@ class ToDoDataBase {
 
   // ─── Load ───────────────────────────────────────────────────────────────
 
-  List<Task> _readTaskBox(Box<Task> box) => box.values.toList();
+  /// The box contents in the user's order (stable for equal `order`s).
+  List<Task> _readTaskBox(Box<Task> box) {
+    final keyed = [for (final t in box.values.indexed) (task: t.$2, pos: t.$1)];
+    keyed.sort((a, b) {
+      final c = a.task.order.compareTo(b.task.order);
+      return c != 0 ? c : a.pos.compareTo(b.pos);
+    });
+    return [for (final e in keyed) e.task];
+  }
 
   List<CalendarEvent> _readCalBox(Box<CalendarEvent> box) =>
       box.values.toList();
@@ -268,6 +425,7 @@ class ToDoDataBase {
   }
 
   void loadData() {
+    dataRevision++;
     loadToDoList();
     loadLocalCalTasks();
     loadGoogleCalTasks();

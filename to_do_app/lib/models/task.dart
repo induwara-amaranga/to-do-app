@@ -28,6 +28,12 @@ class Task {
   String? completedAt; // 18  UTC ISO or "none"
   List<int> notificationIds; // 19
 
+  /// Position in the user's list. Tasks are stored by [id], not by position,
+  /// so reordering or re-inserting one task is a single record write: it only
+  /// needs an [order] between its neighbours' (fractional, so there is always
+  /// room). Not part of the legacy positional schema.
+  double order; // 20
+
   Task({
     required this.name,
     this.completed = false,
@@ -49,6 +55,7 @@ class Task {
     this.source = 'manual',
     this.completedAt,
     List<int>? notificationIds,
+    this.order = 0,
   }) : subtasks = subtasks ?? [],
        remoteEventIds = remoteEventIds ?? const ['', '', ''],
        notificationIds = notificationIds ?? [];
@@ -131,12 +138,13 @@ class TaskAdapter extends TypeAdapter<Task> {
       source: fields[17] as String? ?? 'manual',
       completedAt: fields[18] as String?,
       notificationIds: (fields[19] as List?)?.whereType<int>().toList(),
+      order: (fields[20] as num?)?.toDouble() ?? 0,
     );
   }
 
   @override
   void write(BinaryWriter writer, Task obj) {
-    writer.writeByte(20);
+    writer.writeByte(21);
     writer
       ..writeByte(0)
       ..write(obj.name)
@@ -177,6 +185,8 @@ class TaskAdapter extends TypeAdapter<Task> {
       ..writeByte(18)
       ..write(obj.completedAt)
       ..writeByte(19)
-      ..write(obj.notificationIds);
+      ..write(obj.notificationIds)
+      ..writeByte(20)
+      ..write(obj.order);
   }
 }

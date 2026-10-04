@@ -32,6 +32,7 @@ void main() {
         defaultDueDate: 'Tomorrow',
         timeZoneLabel: 'Asia/Tokyo',
         timeZoneManuallySet: true,
+        keepLatestPastTasks: 1000,
       );
       final copy = AppSettings.fromMap(original.toMap());
       expect(copy.toMap(), original.toMap());
@@ -70,6 +71,14 @@ void main() {
     test('copyWith with no arguments is equivalent', () {
       const base = AppSettings(widgetTaskCount: 3);
       expect(base.copyWith().toMap(), base.toMap());
+    });
+
+    test('keepLatestPastTasks defaults to never and round-trips', () {
+      expect(const AppSettings().keepLatestPastTasks, 0);
+      expect(AppSettings.fromMap({}).keepLatestPastTasks, 0);
+      final s = const AppSettings().copyWith(keepLatestPastTasks: 2000);
+      expect(AppSettings.fromMap(s.toMap()).keepLatestPastTasks, 2000);
+      expect(s.copyWith().keepLatestPastTasks, 2000);
     });
 
     test('reminderTypeNormalized lower-cases the UI value', () {

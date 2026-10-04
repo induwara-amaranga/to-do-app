@@ -5,6 +5,8 @@ import 'package:to_do_app/components/ringtone_picker.dart';
 import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/themes/app_colors.dart';
 import 'package:to_do_app/providers/auth_provider.dart';
+import 'package:to_do_app/providers/data_provider.dart';
+import 'package:to_do_app/services/past_task_cleanup.dart';
 import 'package:to_do_app/themes/theme_provider.dart';
 import 'package:to_do_app/models/settings.dart';
 import 'package:to_do_app/services/notification_service.dart';
@@ -457,6 +459,67 @@ class _SettingsPageState extends State<SettingsPage> {
     widget.db.saveSettings();
   }
 
+  /// Lets the user choose how many past tasks to keep. Choosing a limit that
+  /// would delete tasks right now asks first, saying how many.
+  Future<void> _pickPastTaskLimit() async {
+    final picked = await _pickOption(
+      context,
+      title: 'Remove Past Tasks',
+      options: PastTaskCleanup.options.values.toList(),
+      current: PastTaskCleanup.label(_s.keepLatestPastTasks),
+    );
+    if (picked == null || !mounted) return;
+    final keep =
+        PastTaskCleanup.options.entries
+            .firstWhere((e) => e.value == picked)
+            .key;
+    if (keep == _s.keepLatestPastTasks) return;
+
+    final doomed =
+        PastTaskCleanup.selectRemovable(widget.db.toDoList, keep).length;
+    if (doomed > 0) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder:
+            (ctx) => AlertDialog(
+              title: Text(
+                'Remove $doomed past ${doomed == 1 ? 'task' : 'tasks'}?',
+              ),
+              content: Text(
+                'Only the latest $keep past tasks will be kept. The $doomed '
+                'oldest will be deleted now and this can\'t be undone.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Remove'),
+                ),
+              ],
+            ),
+      );
+      if (ok != true || !mounted) return;
+    }
+
+    _set(_s.copyWith(keepLatestPastTasks: keep));
+    final removed = await PastTaskCleanup.run(widget.db);
+    if (!mounted) return;
+    if (removed > 0) {
+      context.read<DataProvider>().markTasksChanged();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Removed $removed past ${removed == 1 ? 'task' : 'tasks'}',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -631,6 +694,19 @@ class _SettingsPageState extends State<SettingsPage> {
                   );
                   if (v != null) _set(_s.copyWith(defaultCategory: v));
                 },
+              ),
+              _Row(
+                icon: Icons.auto_delete_outlined,
+                color: 'orange',
+                title: 'Remove Past Tasks',
+                subtitle: 'Older past tasks are deleted automatically',
+                chevron: true,
+                trailing: _ValueBadge(
+                  _s.keepLatestPastTasks == 0
+                      ? 'Never'
+                      : 'Latest ${_s.keepLatestPastTasks}',
+                ),
+                onTap: _pickPastTaskLimit,
               ),
               _Row(
                 icon: Icons.language,

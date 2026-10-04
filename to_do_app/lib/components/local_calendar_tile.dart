@@ -183,7 +183,9 @@ class _LocalCalendarTileState extends State<LocalCalendarTile> {
   Future<void> _disableSync() async {
     widget.db.viewOnlyCalendars["local"] = {};
     widget.db.syncToCalendars["local"] = "none";
-    widget.db.updateDataBase();
+    // Only the sync settings changed; the next launch clears the cached events.
+    widget.db.saveSyncToCalendars();
+    widget.db.saveViewOnlyCalendars();
     setState(() {});
   }
 

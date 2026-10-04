@@ -122,9 +122,7 @@ void main() {
 
     test('does not create a duplicate occurrence', () async {
       final db = env.db;
-      db.toDoList.add(
-        makeTask('Gym', dueDate: utcDay(0), repeatType: 'daily'),
-      );
+      db.toDoList.add(makeTask('Gym', dueDate: utcDay(0), repeatType: 'daily'));
       db.toDoList.add(makeTask('Gym', dueDate: utcDay(1), repeatType: 'daily'));
       await RepeatTask.createNextRepeatTask(ctx, 0, db);
       expect(db.toDoList.length, 2);
@@ -132,9 +130,7 @@ void main() {
 
     test('a task with an unparseable due date is ignored', () async {
       final db = env.db;
-      db.toDoList.add(
-        makeTask('Bad', dueDate: 'garbage', repeatType: 'daily'),
-      );
+      db.toDoList.add(makeTask('Bad', dueDate: 'garbage', repeatType: 'daily'));
       await RepeatTask.createNextRepeatTask(ctx, 0, db);
       expect(db.toDoList.length, 1);
     });

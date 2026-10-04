@@ -147,13 +147,10 @@ void main() {
       final local = DateTime(2025, 6, 15, 14, 20);
       final utc = DateTimeUtilsHelper.toUtcUsingLocal(local);
       final back = DateTimeUtilsHelper.toLocalUsingTz(utc);
-      expect([back.year, back.month, back.day, back.hour, back.minute], [
-        2025,
-        6,
-        15,
-        14,
-        20,
-      ]);
+      expect(
+        [back.year, back.month, back.day, back.hour, back.minute],
+        [2025, 6, 15, 14, 20],
+      );
     });
 
     test('locationFromTimeZoneLabel resolves friendly labels', () {
@@ -299,11 +296,10 @@ void main() {
       final a = DateTimeUtilsHelper.initialDueDateFromSetting('Today')!;
       final b = DateTimeUtilsHelper.initialDueDateFromSetting('Tomorrow')!;
       expect([a.year, a.month, a.day], [today.year, today.month, today.day]);
-      expect([b.year, b.month, b.day], [
-        tomorrow.year,
-        tomorrow.month,
-        tomorrow.day,
-      ]);
+      expect(
+        [b.year, b.month, b.day],
+        [tomorrow.year, tomorrow.month, tomorrow.day],
+      );
       expect(
         DateTimeUtilsHelper.initialDueDateFromSetting('No default'),
         isNull,

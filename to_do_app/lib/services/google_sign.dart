@@ -18,6 +18,11 @@ class GoogleAuthService {
   static gcal.CalendarApi? calendarApi;
   static drive.DriveApi? driveApi;
 
+  // Access tokens last about an hour, so clients built in the last few minutes
+  // are reused instead of asking the platform for a token before every call.
+  static DateTime? _apisBuiltAt;
+  static const _apiFreshness = Duration(minutes: 5);
+
   // F-02: silent restore only at startup; interactive sign-in triggered by user action
   static Future<void> initApp() async {
     try {
@@ -53,6 +58,7 @@ class GoogleAuthService {
     if (client == null) return;
     calendarApi = gcal.CalendarApi(client);
     driveApi = drive.DriveApi(client);
+    _apisBuiltAt = DateTime.now();
   }
 
   /// Builds a fresh authenticated HTTP client (auto-refreshes token)
@@ -102,7 +108,13 @@ class GoogleAuthService {
   /// Call this before any API call to ensure apis are fresh
   static Future<bool> ensureApisReady() async {
     if (currentUser == null) return false;
-    await _initApis();
+    final builtAt = _apisBuiltAt;
+    final fresh =
+        calendarApi != null &&
+        driveApi != null &&
+        builtAt != null &&
+        DateTime.now().difference(builtAt) < _apiFreshness;
+    if (!fresh) await _initApis();
     return calendarApi != null && driveApi != null;
   }
 
@@ -123,6 +135,7 @@ class GoogleAuthService {
     currentUser = null;
     calendarApi = null;
     driveApi = null;
+    _apisBuiltAt = null;
   }
 }
 

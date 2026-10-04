@@ -79,7 +79,7 @@ class ImportFromIcsService {
     String remainderType,
     bool isStarred,
   ) async {
-    //db.loadData();
+    final firstNewIndex = db.toDoList.length;
     for (final task in parsedTasks) {
       // final combined = DateTimeUtilsHelper.combineDateAndTime(
       //   task['dueDate'],
@@ -125,7 +125,7 @@ class ImportFromIcsService {
       );
     }
 
-    db.updateDataBase();
+    await db.saveTasksFrom(firstNewIndex);
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

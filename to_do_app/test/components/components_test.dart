@@ -164,6 +164,7 @@ void main() {
     testWidgets('typing updates the task query only', (t) async {
       final (tasks, files) = await pumpBar(t, 'task');
       await t.enterText(find.byType(TextField), 'milk');
+      await t.pump(const Duration(milliseconds: 300)); // debounce
       expect(tasks.query, 'milk');
       expect(files.searchQuery, '');
     });
@@ -171,8 +172,68 @@ void main() {
     testWidgets('typing updates the timetable query only', (t) async {
       final (tasks, files) = await pumpBar(t, 'timetable');
       await t.enterText(find.byType(TextField), 'exam');
+      await t.pump(const Duration(milliseconds: 300)); // debounce
       expect(files.searchQuery, 'exam');
       expect(tasks.query, '');
+    });
+
+    testWidgets('waits for a pause in typing before searching', (t) async {
+      final (tasks, _) = await pumpBar(t, 'task');
+      var notified = 0;
+      tasks.addListener(() => notified++);
+
+      for (final q in ['m', 'mi', 'mil', 'milk']) {
+        await t.enterText(find.byType(TextField), q);
+        await t.pump(const Duration(milliseconds: 100)); // faster than debounce
+      }
+      expect(notified, 0, reason: 'nothing applied while still typing');
+      expect(tasks.query, '');
+
+      await t.pump(const Duration(milliseconds: 300));
+      expect(notified, 1, reason: 'one search for the whole word');
+      expect(tasks.query, 'milk');
+    });
+
+    testWidgets('clearing the box applies immediately', (t) async {
+      final (tasks, _) = await pumpBar(t, 'task');
+      await t.enterText(find.byType(TextField), 'milk');
+      await t.pump(const Duration(milliseconds: 300));
+      expect(tasks.query, 'milk');
+
+      await t.enterText(find.byType(TextField), '');
+      await t.pump(); // no debounce wait
+      expect(tasks.query, '');
+    });
+
+    testWidgets('a custom debounce is honoured', (t) async {
+      final tasks = SearchingProvider();
+      await t.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: tasks,
+          child: ChangeNotifierProvider(
+            create: (_) => FileSearchProvider(),
+            child: host(
+              const app.SearchBar(
+                searchType: 'task',
+                debounce: Duration(milliseconds: 50),
+              ),
+            ),
+          ),
+        ),
+      );
+      await t.enterText(find.byType(TextField), 'a');
+      await t.pump(const Duration(milliseconds: 80));
+      expect(tasks.query, 'a');
+    });
+
+    testWidgets('leaving the page while a search is pending is safe', (
+      t,
+    ) async {
+      final (tasks, _) = await pumpBar(t, 'task');
+      await t.enterText(find.byType(TextField), 'milk');
+      await t.pumpWidget(const SizedBox());
+      await t.pump(const Duration(seconds: 1));
+      expect(tasks.query, '', reason: 'cancelled with the widget');
     });
 
     testWidgets('shows the hint and search icon', (t) async {
@@ -231,9 +292,7 @@ void main() {
 
     testWidgets('omits the count when there are no events', (t) async {
       await t.pumpWidget(
-        host(
-          CalendarEventsHeader(count: 0, collapsed: true, onToggle: () {}),
-        ),
+        host(CalendarEventsHeader(count: 0, collapsed: true, onToggle: () {})),
       );
       expect(find.text('Calendar Events'), findsOneWidget);
     });
@@ -242,15 +301,11 @@ void main() {
       double turns() =>
           t.widget<AnimatedRotation>(find.byType(AnimatedRotation)).turns;
       await t.pumpWidget(
-        host(
-          CalendarEventsHeader(count: 1, collapsed: true, onToggle: () {}),
-        ),
+        host(CalendarEventsHeader(count: 1, collapsed: true, onToggle: () {})),
       );
       expect(turns(), 0);
       await t.pumpWidget(
-        host(
-          CalendarEventsHeader(count: 1, collapsed: false, onToggle: () {}),
-        ),
+        host(CalendarEventsHeader(count: 1, collapsed: false, onToggle: () {})),
       );
       expect(turns(), 0.5);
     });
@@ -371,10 +426,7 @@ void main() {
       final mid = AppColors.light.lerp(AppColors.dark, 0.5);
       expect(mid.muted, isNot(AppColors.light.muted));
       expect(AppColors.light.lerp(null, 0.5), AppColors.light);
-      expect(
-        AppColors.light.copyWith(muted: Colors.pink).muted,
-        Colors.pink,
-      );
+      expect(AppColors.light.copyWith(muted: Colors.pink).muted, Colors.pink);
     });
   });
 
@@ -390,8 +442,7 @@ void main() {
               appBar: AppBar(
                 bottom: MyTabBar(
                   controller: null,
-                  taskCategoryTabs:
-                      () => [for (final n in names) Tab(text: n)],
+                  taskCategoryTabs: () => [for (final n in names) Tab(text: n)],
                 ),
               ),
             ),
@@ -414,14 +465,17 @@ void main() {
       await t.pumpWidget(
         MaterialApp(
           theme: lightMode,
-          home: const Scaffold(bottomNavigationBar: TaskBottomNavBar(current: 1)),
+          home: const Scaffold(
+            bottomNavigationBar: TaskBottomNavBar(current: 1),
+          ),
         ),
       );
       expect(find.text('Calender'), findsOneWidget);
       expect(find.text('Tasks'), findsOneWidget);
       expect(find.text('Statistics'), findsOneWidget);
       expect(
-        t.widget<BottomNavigationBar>(find.byType(BottomNavigationBar))
+        t
+            .widget<BottomNavigationBar>(find.byType(BottomNavigationBar))
             .currentIndex,
         1,
       );
@@ -439,7 +493,9 @@ void main() {
               builder:
                   (_) => Scaffold(
                     bottomNavigationBar:
-                        s.name == '/' ? const TaskBottomNavBar(current: 1) : null,
+                        s.name == '/'
+                            ? const TaskBottomNavBar(current: 1)
+                            : null,
                     body: Text('page ${s.name}'),
                   ),
             );

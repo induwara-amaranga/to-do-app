@@ -9,10 +9,15 @@ class OutlookAuthService {
 
   static String? _accessToken;
   static String? get accessToken => _accessToken;
+  static set accessToken(String? token) => _accessToken = token;
 
   static final storage = FlutterSecureStorage();
 
   static late SingleAccountPca _pca;
+
+  // The MSAL client is created once and reused; creating it is a platform
+  // call, and it used to happen on every token request.
+  static Future<void>? _initFuture;
 
   // B-02: only assign _accessToken after verification succeeds
   // static Future<bool> restoreLastSession() async {
@@ -49,11 +54,21 @@ class OutlookAuthService {
     try {
       await _pca.signOut();
       _accessToken = null;
+      _tokenAt = null;
       await storage.delete(key: 'outlook_cal_accessToken');
     } catch (_) {}
   }
 
+  static DateTime? _tokenAt;
+  static const _tokenFreshness = Duration(minutes: 5);
+
   static Future<String?> acquireTokenSilently() async {
+    final at = _tokenAt;
+    if (_accessToken != null &&
+        at != null &&
+        DateTime.now().difference(at) < _tokenFreshness) {
+      return _accessToken; // acquired moments ago (e.g. at start-up)
+    }
     try {
       await init();
       final result = await _pca.acquireTokenSilent(
@@ -63,14 +78,20 @@ class OutlookAuthService {
         ],
       );
 
-      // F-04: never log the full token
+      // F-04: never log the full token.
+      // A successful silent acquire is a verified, fresh token: keep it so
+      // calendar calls use it instead of the one from app start.
+      _accessToken = result.accessToken;
+      _tokenAt = DateTime.now();
       return result.accessToken;
     } catch (e) {
       return null;
     }
   }
 
-  static Future<void> init() async {
+  static Future<void> init() => _initFuture ??= _create();
+
+  static Future<void> _create() async {
     try {
       _pca = await SingleAccountPca.create(
         clientId: _clientId,
@@ -79,7 +100,9 @@ class OutlookAuthService {
           redirectUri: _redirectUri,
         ),
       );
-    } catch (_) {}
+    } catch (_) {
+      _initFuture = null; // allow a later retry
+    }
   }
 
   static Future<String?> signIn() async {

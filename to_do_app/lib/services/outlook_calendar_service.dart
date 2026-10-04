@@ -14,7 +14,9 @@ import 'package:uuid/uuid.dart';
 final _uuid = Uuid();
 
 class OutlookCalendarService {
-  static String? _accessToken = OutlookAuthService.accessToken;
+  // A getter, not a `static final`: a final would freeze whatever the auth
+  // service held when this class was first touched (null before sign-in).
+  static String? get _accessToken => OutlookAuthService.accessToken;
   // static Future<bool> initialize() async {
   //   // _pca = await PublicClientApplication.createPublicClientApplication(
   //   //   _clientId,
@@ -354,19 +356,25 @@ class OutlookCalendarService {
       );
     }
 
-    await db.updateDataBase();
+    await db.saveToDoList();
   }
 
   /// (Optional) Setter for access token from login
   static void setAccessToken(String token) {
-    _accessToken = token;
+    OutlookAuthService.accessToken = token;
   }
 
   /// 🔹 Import view-only Outlook events (no editing)
+  ///
+  /// With [replace], the cached Outlook events are swapped for what this
+  /// fetch returns. The list is cleared only after every network call has
+  /// succeeded, and refilled in the same synchronous block, so the UI never
+  /// sees it empty and a failed fetch keeps the cache.
   static Future<void> importViewOnlyEventsToDB(
     String calendarId,
-    ToDoDataBase db,
-  ) async {
+    ToDoDataBase db, {
+    bool replace = false,
+  }) async {
     if (_accessToken == null) throw Exception('Not signed in');
 
     // Fetch events
@@ -396,6 +404,8 @@ class OutlookCalendarService {
         );
       }
     }
+
+    if (replace) db.outlookCalTasks.clear();
 
     for (final e in events) {
       if (e['start'] == null) continue;
@@ -470,7 +480,7 @@ class OutlookCalendarService {
       );
     }
 
-    await db.updateDataBase();
+    await db.saveOutlookCalTasks();
   }
 
   static Future<void> syncTasksToCalendar(
@@ -492,7 +502,7 @@ class OutlookCalendarService {
     //db.outlookCalTasks.removeWhere((t) => t[14] == calID);
     //List<dynamic> events = await getEvents(calID);
     try {
-      await importViewOnlyEventsToDB(calID, db);
+      await importViewOnlyEventsToDB(calID, db, replace: true);
     } catch (_) {}
   }
 

@@ -339,15 +339,23 @@ class GoogleCalendarService {
       );
     }
 
-    await db.updateDataBase();
+    await db.saveToDoList();
   }
 
   /// Import a list of view-only events into the google DB
+  ///
+  /// With [replace], the cached Google events are swapped for exactly [events]
+  /// (used by the launch sync, after a successful fetch, so events deleted
+  /// remotely disappear). A failed fetch never reaches here, so the cache is
+  /// kept when offline.
   static Future<void> importViewOnlyEventsToDB(
     List<dynamic>? events,
-    ToDoDataBase db,
-  ) async {
+    ToDoDataBase db, {
+    bool replace = false,
+  }) async {
+    if (replace && events != null) db.googleCalTasks.clear();
     if (events == null || events.isEmpty) {
+      if (replace && events != null) await db.saveGoogleCalTasks();
       return;
     }
 
@@ -438,7 +446,7 @@ class GoogleCalendarService {
       );
     }
 
-    await db.updateDataBase();
+    await db.saveGoogleCalTasks();
   }
 
   // /// Sync google tasks → Google Calendar
@@ -534,7 +542,7 @@ class GoogleCalendarService {
     //db.googleCalTasks.removeWhere((t) => t[14] == calID);
     List<dynamic> events = await getEvents(calID);
     try {
-      await importViewOnlyEventsToDB(events, db);
+      await importViewOnlyEventsToDB(events, db, replace: true);
     } catch (_) {}
   }
 

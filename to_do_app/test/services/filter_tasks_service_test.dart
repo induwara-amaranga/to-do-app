@@ -169,10 +169,9 @@ void main() {
     });
 
     test('tasks without a due date never match a date filter', () {
-      final r = FilterTasksService.filterTasksByCategory(
-        [makeTask('undated', dueDate: null)],
-        filter(dates: [DateTime.utc(2025, 3, 4)]),
-      );
+      final r = FilterTasksService.filterTasksByCategory([
+        makeTask('undated', dueDate: null),
+      ], filter(dates: [DateTime.utc(2025, 3, 4)]));
       expect(r, isEmpty);
     });
   });

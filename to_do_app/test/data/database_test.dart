@@ -214,37 +214,217 @@ void main() {
       expect(db.toDoList.length, 1);
     });
 
-    test('helpers recover when memory and box drift apart', () async {
-      await db.appendTask(makeTask('a'));
-      await db.appendTask(makeTask('b'));
-      // Mutate memory behind the helpers' back.
-      db.toDoList.add(makeTask('sneaky'));
-      db.toDoList[0].name = 'edited';
-      await db.saveTaskAt(0); // lengths differ -> full rewrite
-      expect((await reopen(env)).toDoList.map((t) => t.name), [
-        'edited',
-        'b',
-        'sneaky',
-      ]);
+    test(
+      'a save only ever touches that task, not unsaved neighbours',
+      () async {
+        await db.appendTask(makeTask('a'));
+        await db.appendTask(makeTask('b'));
+        db.toDoList.add(makeTask('never saved'));
+        db.toDoList[0].name = 'edited';
+        await db.saveTaskAt(0);
+        final back = (await reopen(env)).toDoList;
+        expect(back.map((t) => t.name), ['edited', 'b']);
+      },
+    );
+  });
+
+  group('order and single-record writes', () {
+    /// Number of Hive write events produced by [action].
+    Future<int> writes(Future<void> Function() action) async {
+      final events = <BoxEvent>[];
+      final sub = Hive.box<Task>('tasks').watch().listen(events.add);
+      await action();
+      await Future.delayed(const Duration(milliseconds: 50));
+      await sub.cancel();
+      return events.length;
+    }
+
+    Future<void> seed(List<String> names) async {
+      for (final n in names) {
+        await db.appendTask(makeTask(n));
+      }
+    }
+
+    List<String> names(ToDoDataBase d) =>
+        d.toDoList.map((t) => t.name).toList();
+
+    test('tasks are stored under their id', () async {
+      final t = makeTask('x', id: 'my-id');
+      await db.appendTask(t);
+      expect(Hive.box<Task>('tasks').keys, ['my-id']);
     });
 
-    test('appendTask falls back to a full rewrite when misaligned', () async {
-      await db.appendTask(makeTask('a'));
-      db.toDoList.add(makeTask('ghost')); // memory has one extra
-      await db.appendTask(makeTask('b'));
-      expect((await reopen(env)).toDoList.map((t) => t.name), [
-        'a',
-        'ghost',
-        'b',
-      ]);
+    test('append, edit and delete are one write each', () async {
+      await seed(['a', 'b', 'c']);
+      expect(await writes(() => db.appendTask(makeTask('d'))), 1);
+      db.toDoList[1].completed = true;
+      expect(await writes(() => db.saveTaskAt(1)), 1);
+      expect(await writes(() => db.removeTaskAt(2)), 1);
     });
 
-    test('removeTaskAt falls back to a full rewrite when misaligned', () async {
-      await db.appendTask(makeTask('a'));
-      await db.appendTask(makeTask('b'));
-      db.toDoList.add(makeTask('ghost'));
+    test('moving a task is one write and survives a restart', () async {
+      await seed(['a', 'b', 'c', 'd']);
+      expect(await writes(() => db.moveTask(0, 2)), 1);
+      expect(names(db), ['b', 'c', 'a', 'd']);
+      expect(names(await reopen(env)), ['b', 'c', 'a', 'd']);
+    });
+
+    test('moving to either end', () async {
+      await seed(['a', 'b', 'c']);
+      await db.moveTask(2, 0);
+      expect(names(db), ['c', 'a', 'b']);
+      await db.moveTask(0, 2);
+      expect(names(db), ['a', 'b', 'c']);
+      expect(names(await reopen(env)), ['a', 'b', 'c']);
+    });
+
+    test('moving leaves every other task order untouched', () async {
+      await seed(['a', 'b', 'c', 'd']);
+      final before = {for (final t in db.toDoList) t.name: t.order};
+      await db.moveTask(3, 1);
+      for (final t in db.toDoList) {
+        if (t.name != 'd') expect(t.order, before[t.name], reason: t.name);
+      }
+    });
+
+    test('moving to the same place or out of range does nothing', () async {
+      await seed(['a', 'b']);
+      expect(await writes(() => db.moveTask(1, 1)), 0);
+      expect(await writes(() => db.moveTask(5, 0)), 0);
+      expect(await writes(() => db.moveTask(-1, 0)), 0);
+      expect(names(db), ['a', 'b']);
+    });
+
+    test('undo-delete puts the task back in place with one write', () async {
+      await seed(['a', 'b', 'c', 'd']);
+      final removed = db.toDoList[1];
+      await db.removeTaskAt(1);
+      expect(names(db), ['a', 'c', 'd']);
+      expect(await writes(() => db.insertTaskAt(1, removed)), 1);
+      expect(names(db), ['a', 'b', 'c', 'd']);
+      expect(names(await reopen(env)), ['a', 'b', 'c', 'd']);
+    });
+
+    test('undo-delete at the ends and past the end', () async {
+      await seed(['a', 'b', 'c']);
+      final first = db.toDoList.first;
+      final last = db.toDoList.last;
       await db.removeTaskAt(0);
-      expect((await reopen(env)).toDoList.map((t) => t.name), ['b', 'ghost']);
+      await db.insertTaskAt(0, first);
+      await db.removeTaskAt(2);
+      await db.insertTaskAt(99, last); // clamped to the end
+      expect(names(db), ['a', 'b', 'c']);
+      expect(names(await reopen(env)), ['a', 'b', 'c']);
+    });
+
+    test('a long run of drags keeps the order correct', () async {
+      await seed(['a', 'b', 'c', 'd', 'e']);
+      final expected = ['a', 'b', 'c', 'd', 'e'];
+      // Repeatedly drop the last item between the first two: the gap halves
+      // each time, so this exhausts double precision and must renumber.
+      for (var i = 0; i < 80; i++) {
+        final moved = expected.removeLast();
+        expected.insert(1, moved);
+        await db.moveTask(db.toDoList.length - 1, 1);
+        expect(names(db), expected, reason: 'drag $i');
+      }
+      expect(names(await reopen(env)), expected);
+    });
+
+    test('orders strictly increase after any sequence of edits', () async {
+      await seed(['a', 'b', 'c', 'd', 'e', 'f']);
+      await db.moveTask(5, 0);
+      await db.moveTask(0, 3);
+      final t = db.toDoList[2];
+      await db.removeTaskAt(2);
+      await db.insertTaskAt(4, t);
+      await db.appendTask(makeTask('g'));
+      for (var i = 1; i < db.toDoList.length; i++) {
+        expect(
+          db.toDoList[i].order,
+          greaterThan(db.toDoList[i - 1].order),
+          reason: 'index $i',
+        );
+      }
+    });
+
+    test('order survives the typed adapter round trip', () async {
+      await seed(['a', 'b', 'c']);
+      await db.moveTask(2, 0);
+      final back = await reopen(env);
+      expect(back.toDoList.map((t) => t.order).toList(), [
+        for (final t in db.toDoList) t.order,
+      ]);
+    });
+
+    test('a task saved without a fitting order is slotted in place', () async {
+      await seed(['a', 'b', 'c']);
+      // Code that adds to the list directly leaves order at its default 0.
+      final stray = makeTask('stray');
+      db.toDoList.insert(2, stray);
+      await db.saveTaskAt(2);
+      expect(names(await reopen(env)), ['a', 'b', 'stray', 'c']);
+    });
+
+    test('saveTasksFrom writes only the new tail', () async {
+      await seed(['a', 'b']);
+      final start = db.toDoList.length;
+      db.toDoList.add(makeTask('c'));
+      db.toDoList.add(makeTask('d'));
+      expect(await writes(() => db.saveTasksFrom(start)), 2);
+      expect(names(await reopen(env)), ['a', 'b', 'c', 'd']);
+    });
+
+    test('saveToDoList renumbers to match the list order', () async {
+      await seed(['a', 'b', 'c']);
+      db.toDoList = db.toDoList.reversed.toList();
+      await db.saveToDoList();
+      expect(names(await reopen(env)), ['c', 'b', 'a']);
+    });
+
+    test('duplicate and empty ids are repaired on a full save', () async {
+      db.toDoList = [
+        makeTask('one', id: 'same'),
+        makeTask('two', id: 'same'),
+        makeTask('three', id: ''),
+      ];
+      await db.saveToDoList();
+      final ids = db.toDoList.map((t) => t.id).toSet();
+      expect(ids.length, 3);
+      expect(ids, isNot(contains('')));
+      expect(names(await reopen(env)), ['one', 'two', 'three']);
+    });
+
+    test('a box written by the old int-keyed version is migrated', () async {
+      // Old layout: auto-increment int keys, list position = key, no order.
+      await Hive.box<Task>('tasks').addAll([
+        makeTask('old1', id: 'x1'),
+        makeTask('old2', id: ''),
+        makeTask('old3', id: 'x1'),
+      ]);
+      final box = Hive.box<Task>('tasks');
+      expect(box.keys.every((k) => k is int), isTrue);
+
+      final back = await reopen(env); // openBoxes() migrates
+      expect(names(back), ['old1', 'old2', 'old3']);
+      expect(Hive.box<Task>('tasks').keys.every((k) => k is String), isTrue);
+      expect(back.toDoList.map((t) => t.id).toSet().length, 3);
+    });
+
+    test('migration keeps completed flags and fields', () async {
+      await Hive.box<Task>(
+        'tasks',
+      ).addAll([makeTask('keep', id: 'k', completed: true, priority: 'High')]);
+      final t = (await reopen(env)).toDoList.single;
+      expect(t.completed, isTrue);
+      expect(t.priority, 'High');
+    });
+
+    test('opening an already migrated box changes nothing', () async {
+      await seed(['a', 'b']);
+      final before = db.toDoList.map((t) => t.order).toList();
+      final back = await reopen(env);
+      expect(back.toDoList.map((t) => t.order).toList(), before);
     });
   });
 
@@ -418,7 +598,11 @@ void main() {
         ],
         'CATEGORIES': ['None', 'Legacy'],
         'SETTINGS': {'widgetTaskCount': 7},
-        'SYNC_TO_CALENDARS': {'local': 'c1', 'google': 'none', 'outlook': 'none'},
+        'SYNC_TO_CALENDARS': {
+          'local': 'c1',
+          'google': 'none',
+          'outlook': 'none',
+        },
         'VIEW_ONLY_CALENDARS': {
           'local': ['x'],
           'google': [],
@@ -459,6 +643,170 @@ void main() {
 
     test('works when mybox was never opened', () {
       expect(db.runMigrations, returnsNormally);
+    });
+  });
+
+  group('dataRevision', () {
+    Future<void> expectBumps(
+      String what,
+      Future<void> Function() action,
+    ) async {
+      final before = db.dataRevision;
+      await action();
+      expect(db.dataRevision, greaterThan(before), reason: what);
+    }
+
+    test('every write to the task box bumps it', () async {
+      await expectBumps('appendTask', () => db.appendTask(makeTask('a')));
+      await db.appendTask(makeTask('b'));
+      await db.appendTask(makeTask('c'));
+      await expectBumps('saveTaskAt', () => db.saveTaskAt(0));
+      await expectBumps('moveTask', () => db.moveTask(0, 2));
+      await expectBumps('insertTaskAt', () async {
+        final t = db.toDoList.first;
+        await db.removeTaskAt(0);
+        await db.insertTaskAt(0, t);
+      });
+      await expectBumps('removeTaskAt', () => db.removeTaskAt(0));
+      await expectBumps('saveToDoList', db.saveToDoList);
+      await expectBumps(
+        'removeTasks',
+        () => db.removeTasks([db.toDoList.first]),
+      );
+      await expectBumps('saveTasksAt', () => db.saveTasksAt([0]));
+      db.toDoList.add(makeTask('tail'));
+      await expectBumps(
+        'saveTasksFrom',
+        () => db.saveTasksFrom(db.toDoList.length - 1),
+      );
+      await expectBumps('clearToDoList', db.clearToDoList);
+    });
+
+    test('every write to a calendar box bumps it', () async {
+      await expectBumps('saveLocalCalTasks', db.saveLocalCalTasks);
+      await expectBumps('saveGoogleCalTasks', db.saveGoogleCalTasks);
+      await expectBumps('saveOutlookCalTasks', db.saveOutlookCalTasks);
+      await expectBumps('clearLocalCalTasks', db.clearLocalCalTasks);
+      await expectBumps('clearGoogleCalTasks', db.clearGoogleCalTasks);
+      await expectBumps('clearOutlookCalTasks', db.clearOutlookCalTasks);
+    });
+
+    test('reloading from disk bumps it', () {
+      final before = db.dataRevision;
+      db.loadData();
+      expect(db.dataRevision, greaterThan(before));
+    });
+
+    test('calls that change nothing leave it alone', () async {
+      await db.appendTask(makeTask('a'));
+      final before = db.dataRevision;
+      await db.saveTaskAt(99);
+      await db.removeTaskAt(99);
+      await db.moveTask(0, 0);
+      await db.removeTasks([]);
+      await db.saveTasksFrom(5);
+      await db.saveTasksAt([42]);
+      expect(db.dataRevision, before);
+    });
+
+    test('settings and metadata saves do not count as data changes', () {
+      final before = db.dataRevision;
+      db.saveSettings();
+      db.saveCategories();
+      db.saveSyncToCalendars();
+      expect(db.dataRevision, before);
+    });
+  });
+
+  group('saveTasksAt', () {
+    test('writes several edited tasks in one batch', () async {
+      for (final n in ['a', 'b', 'c', 'd']) {
+        await db.appendTask(makeTask(n));
+      }
+      db.toDoList[0].name = 'A!';
+      db.toDoList[2].name = 'C!';
+      db.toDoList[3].name = 'unsaved';
+      await db.saveTasksAt([0, 2]);
+      final back = (await reopen(env)).toDoList.map((t) => t.name).toList();
+      expect(back, ['A!', 'b', 'C!', 'd']);
+    });
+
+    test('ignores out-of-range and duplicate indexes', () async {
+      await db.appendTask(makeTask('a'));
+      db.toDoList[0].name = 'edited';
+      await db.saveTasksAt([-1, 0, 0, 7]);
+      expect((await reopen(env)).toDoList.single.name, 'edited');
+    });
+  });
+
+  group('legacy box is opened only when it is needed', () {
+    Future<void> writeLegacyBox() async {
+      final legacy = await Hive.openBox('mybox');
+      await legacy.put('TODOLIST', [
+        ['Old task', false, '', '2024-01-02', '09:00'],
+      ]);
+      await legacy.put('CATEGORIES', ['None', 'Legacy']);
+      await Hive.close();
+    }
+
+    Future<ToDoDataBase> restart() async {
+      Hive.init(env.dir.path);
+      final fresh = ToDoDataBase();
+      await fresh.openBoxes();
+      return fresh;
+    }
+
+    test('a plain launch never creates or opens it', () async {
+      await Hive.close();
+      final fresh = await restart();
+      expect(Hive.isBoxOpen('mybox'), isFalse);
+      expect(
+        await Hive.boxExists('mybox'),
+        isFalse,
+        reason: 'not even created',
+      );
+      expect(fresh.isFreshInstall, isTrue);
+    });
+
+    test('an old install with the box on disk still migrates', () async {
+      await Hive.close();
+      Hive.init(env.dir.path);
+      await writeLegacyBox();
+
+      final fresh = await restart();
+      expect(Hive.isBoxOpen('mybox'), isTrue);
+      fresh.runMigrations();
+      expect(fresh.toDoList.single.name, 'Old task');
+      expect(fresh.categories, ['None', 'Legacy']);
+    });
+
+    test('once migrated (schema current) the box is left closed', () async {
+      await Hive.close();
+      Hive.init(env.dir.path);
+      await writeLegacyBox();
+      var fresh = await restart();
+      fresh.runMigrations();
+      // The migration saves without awaiting; let those writes finish.
+      await Future.delayed(const Duration(milliseconds: 300));
+      await Hive.close();
+
+      fresh = await restart();
+      expect(Hive.isBoxOpen('mybox'), isFalse);
+    });
+
+    test('all other boxes are open after startup', () async {
+      await Hive.close();
+      await restart();
+      for (final name in [
+        'meta',
+        'tasks',
+        'localCalTasks',
+        'googleCalTasks',
+        'outlookCalTasks',
+        'fileMetaBox',
+      ]) {
+        expect(Hive.isBoxOpen(name), isTrue, reason: name);
+      }
     });
   });
 

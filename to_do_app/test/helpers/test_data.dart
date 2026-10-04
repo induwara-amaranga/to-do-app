@@ -79,6 +79,16 @@ String utcDay(int daysFromToday) {
   return '${d.year}-$m-$day';
 }
 
+/// `yyyy-MM-dd` for [daysFromToday] days from today in the machine's LOCAL
+/// time zone. The task page groups tasks by comparing against local "now",
+/// so page-level tests must use this rather than [utcDay].
+String localDay(int daysFromToday) {
+  final d = DateTime.now().add(Duration(days: daysFromToday));
+  final m = d.month.toString().padLeft(2, '0');
+  final day = d.day.toString().padLeft(2, '0');
+  return '${d.year}-$m-$day';
+}
+
 bool _tzReady = false;
 
 /// Loads the timezone database and pins `tz.local` so conversions are

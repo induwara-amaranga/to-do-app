@@ -5,6 +5,8 @@ import 'package:to_do_app/models/sub_task.dart';
 import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/models/types.dart';
 import 'package:to_do_app/providers/calendar_sync_provider.dart';
+import 'package:to_do_app/providers/data_provider.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:to_do_app/components/create_task_sheet.dart';
 import 'package:to_do_app/components/drawer.dart';
@@ -25,6 +27,8 @@ import 'package:provider/provider.dart';
 import 'package:to_do_app/services/notification_service.dart';
 import 'package:to_do_app/services/outlook_calendar_service.dart';
 import 'package:to_do_app/services/outlook_sign.dart';
+import 'package:to_do_app/services/app_startup.dart';
+import 'package:to_do_app/services/past_task_cleanup.dart';
 import 'package:to_do_app/services/repeat_task.dart';
 import 'package:to_do_app/services/search_tasks.dart';
 import 'package:to_do_app/services/sort_tasks_service.dart';
@@ -61,7 +65,9 @@ class _TaskPageState extends State<TaskPage>
 
   final uuid = Uuid();
   late TabController _tabController;
-  bool isDuringAnimation = false;
+  // Hides the completed-tasks FAB while a completion animation plays. A
+  // notifier so only the FAB rebuilds, not the whole page.
+  final ValueNotifier<bool> _isDuringAnimation = ValueNotifier(false);
 
   bool _isStarred = false;
   String _selectedCategory = "None";
@@ -130,6 +136,7 @@ class _TaskPageState extends State<TaskPage>
       length: _taskCategoryTabs().length,
       vsync: this,
     );
+    _uiRevision++;
     setState(() {
       for (int i = 0; i < db.toDoList.length; i++) {
         final task = db.toDoList[i];
@@ -149,7 +156,46 @@ class _TaskPageState extends State<TaskPage>
     db.saveTasksAndCategories();
   }
 
+  // ── Tab result cache ──────────────────────────────────────────────────────
+  //
+  // Each tab's search -> sort -> group result is reused until something it
+  // depends on changes: the data (db.dataRevision covers every box write, and
+  // _uiRevision covers in-page edits that precede their save), the grouping,
+  // sorting or search query, the completed toggle, or the calendar day (the
+  // default grouping is relative to today).
+  int _uiRevision = 0;
+
+  /// How many times a tab's list was actually recomputed (for tests).
+  @visibleForTesting
+  int debugTabComputations = 0;
+  final Map<String, ({Object key, Map<String, List<Task>> grouped})> _tabCache =
+      {};
+
+  Object _tabCacheKey() {
+    final n = DateTime.now();
+    return (
+      db.dataRevision,
+      _uiRevision,
+      grouping,
+      sorting,
+      query,
+      showCompletedTasks,
+      '${n.year}-${n.month}-${n.day}',
+    );
+  }
+
   // ── Task CRUD ─────────────────────────────────────────────────────────────
+
+  /// Refreshes everything that shows tasks (tab labels, the lists, the
+  /// urgent-task banner) after the data changed, without rebuilding the rest
+  /// of the page. The pieces that depend on tasks select
+  /// [DataProvider.taskRevision]; this bumps it.
+  void _tasksChanged() {
+    _uiRevision++;
+    toDoList = db.toDoList;
+    hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
+    if (mounted) context.read<DataProvider>().markTasksChanged();
+  }
 
   void checkBoxChanged(bool? value, int index) async {
     if (value != null) {
@@ -158,11 +204,8 @@ class _TaskPageState extends State<TaskPage>
     }
     final bool spawnsRepeat =
         value == true && db.toDoList[index].repeatType != "none";
-    setState(() {
-      db.toDoList[index].completed = !db.toDoList[index].completed;
-      toDoList = db.toDoList;
-      hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
-    });
+    db.toDoList[index].completed = !db.toDoList[index].completed;
+    _tasksChanged();
 
     // A toggle touches exactly one record — write only that one. Done before
     // the repeat handling below because that has several early-return paths
@@ -173,10 +216,7 @@ class _TaskPageState extends State<TaskPage>
       // Appends the next occurrence and persists the list when it does.
       await RepeatTask.createNextRepeatTask(context, index, db);
       if (!mounted) return;
-      setState(() {
-        toDoList = db.toDoList;
-        hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
-      });
+      _tasksChanged();
     }
   }
 
@@ -212,7 +252,7 @@ class _TaskPageState extends State<TaskPage>
     );
     // Appends one record to the box instead of rewriting it.
     await db.appendTask(task);
-    if (mounted) setState(() {});
+    if (mounted) _tasksChanged();
     if (selectedRemainderAmount >= 0 &&
         selectedRepeatType != "none" &&
         mounted) {
@@ -224,9 +264,8 @@ class _TaskPageState extends State<TaskPage>
         db.toDoList.length - 1,
       );
     }
-    toDoList = db.toDoList;
     await CordinateCalendars.addUpdateTaskToCalendars(db, task);
-    hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
+    if (mounted) _tasksChanged();
     // Re-save the one record: the calendar fan-out fills in remoteEventIds.
     await db.saveTaskAt(db.toDoList.indexOf(task));
     _taskNameController.clear();
@@ -250,10 +289,7 @@ class _TaskPageState extends State<TaskPage>
       await _purgeDeletedTask(deletedTask);
       return;
     }
-    setState(() {
-      toDoList = db.toDoList;
-      hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
-    });
+    _tasksChanged();
 
     final reason =
         await ScaffoldMessenger.of(context)
@@ -279,15 +315,10 @@ class _TaskPageState extends State<TaskPage>
     // reminders and events are gone, so don't resurrect a half-task.
     if (_pendingDeletes.remove(task.id) == null) return;
     if (!mounted) return;
-    setState(() {
-      // Other deletes may have shortened the list since.
-      db.toDoList.insert(index.clamp(0, db.toDoList.length), task);
-      toDoList = db.toDoList;
-      hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
-    });
-    // Mid-list insert shifts every later key — Hive has no insert-at,
-    // so this one genuinely needs the full task-box rewrite.
-    db.saveToDoList();
+    // Other deletes may have shortened the list since; insertTaskAt clamps.
+    // The list changes immediately; the box write is a single record.
+    db.insertTaskAt(index, task);
+    _tasksChanged();
   }
 
   /// Cancels a deleted task's reminders and removes its calendar events.
@@ -302,7 +333,7 @@ class _TaskPageState extends State<TaskPage>
 
   void editTask(int index, Map<String, dynamic> taskDetails) async {
     final String id = uuid.v4();
-    setState(() {
+    {
       final task = db.toDoList[index];
       task.name = taskDetails['taskName'];
       task.note = taskDetails['taskNote'];
@@ -318,7 +349,8 @@ class _TaskPageState extends State<TaskPage>
       final List<Map<String, dynamic>> subTaskMaps =
           (taskDetails['subTasks'] as List<Map<String, dynamic>>?) ?? [];
       task.subtasks = subTaskMaps.map(SubTask.fromMap).toList();
-    });
+    }
+    _tasksChanged();
     for (int id in db.toDoList[index].notificationIds) {
       await NotificationService.cancelNotification(id);
     }
@@ -332,8 +364,6 @@ class _TaskPageState extends State<TaskPage>
         index,
       );
     }
-    toDoList = db.toDoList;
-    hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
     await CordinateCalendars.addUpdateTaskToCalendars(db, db.toDoList[index]);
     // An edit rewrites one record in place.
     await db.saveTaskAt(index);
@@ -367,19 +397,15 @@ class _TaskPageState extends State<TaskPage>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Safe to use context and show dialogs here
       if (widget.updateMissedTasks) {
-        RepeatTask.createPendingRepeatTasks(db, context);
+        final before = db.toDoList.length;
+        await RepeatTask.createPendingRepeatTasks(db, context);
+        if (db.toDoList.length != before && mounted) _tasksChanged();
       }
+      // Apply the "remove past tasks" preference once the catch-up has made
+      // sure every repeating series has its next occurrence.
+      final removed = await PastTaskCleanup.run(db);
+      if (removed > 0 && mounted) _tasksChanged();
 
-      if (db.syncToCalendars["google"] != "none") {
-        try {
-          await GoogleAuthService.ensureApisReady();
-        } catch (_) {}
-      }
-      if (db.syncToCalendars["outlook"] != "none") {
-        try {
-          await OutlookAuthService.acquireTokenSilently();
-        } catch (_) {}
-      }
       await importViewOnly();
     });
   }
@@ -407,6 +433,7 @@ class _TaskPageState extends State<TaskPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
+    _isDuringAnimation.dispose();
     _tabController.dispose();
     _taskNameController.dispose();
     _taskNoteController.dispose();
@@ -436,12 +463,6 @@ class _TaskPageState extends State<TaskPage>
     // bar displays. The Consumer around _buildSyncBar scopes it to that bar.
     query = context.watch<SearchingProvider>().query;
 
-    // Computed once per build and handed to the app bar as a closure, so its
-    // per-scroll-frame rebuilds reuse these instead of recounting.
-    final tabs = _taskCategoryTabs();
-    final tabNames = _tabNames();
-    _rebuildTaskIndex();
-
     return Scaffold(
       drawer: MyDrawer(
         db: db,
@@ -463,28 +484,34 @@ class _TaskPageState extends State<TaskPage>
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
-            TaskPageAppBar(
-              db: db,
-              hidingCategories: _hidingCategories,
-              onCategoryChanged:
-                  (newC, hidden, editting) =>
-                      changeCategories(newC, hidden, editting),
-              categoryTypes: db.categories,
-              onChanged: (index, value) => checkBoxChanged(value, index),
-              deleteFunction: (index) => deleteTask(index),
-              onTaskChnaged: (index, taskDetails) {
-                setState(() {
-                  editTask(index, taskDetails);
-                });
+            // Tab labels carry pending counts, so they follow task changes.
+            Selector<DataProvider, int>(
+              selector: (_, data) => data.taskRevision,
+              builder: (context, _, __) {
+                // Computed once per rebuild and handed to the app bar as a
+                // closure, so its per-scroll-frame rebuilds reuse it.
+                final tabs = _taskCategoryTabs();
+                return TaskPageAppBar(
+                  db: db,
+                  hidingCategories: _hidingCategories,
+                  onCategoryChanged:
+                      (newC, hidden, editting) =>
+                          changeCategories(newC, hidden, editting),
+                  categoryTypes: db.categories,
+                  onChanged: (index, value) => checkBoxChanged(value, index),
+                  deleteFunction: (index) => deleteTask(index),
+                  onTaskChnaged:
+                      (index, taskDetails) => editTask(index, taskDetails),
+                  pageContext: context,
+                  categoriesAndPriorities:
+                      db.categories +
+                      ["High", "Medium", "Low"] +
+                      ["Completed", "Pending", "Missed"],
+                  openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                  taskCategoryTabs: () => tabs,
+                  tabController: _tabController,
+                );
               },
-              pageContext: context,
-              categoriesAndPriorities:
-                  db.categories +
-                  ["High", "Medium", "Low"] +
-                  ["Completed", "Pending", "Missed"],
-              openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
-              taskCategoryTabs: () => tabs,
-              tabController: _tabController,
             ),
           ];
         },
@@ -493,7 +520,14 @@ class _TaskPageState extends State<TaskPage>
         body: Column(
           children: [
             // Warning banner — replaces the overlapping warning FAB
-            if (warningColor != null) _buildWarningBanner(),
+            Selector<DataProvider, int>(
+              selector: (_, data) => data.taskRevision,
+              builder:
+                  (_, __, ___) =>
+                      warningColor != null
+                          ? _buildWarningBanner()
+                          : const SizedBox.shrink(),
+            ),
             // Sync progress bar — full-width, theme-aware
             Consumer<CalendarSyncProvider>(
               builder: (_, sync, __) {
@@ -503,19 +537,30 @@ class _TaskPageState extends State<TaskPage>
             ),
             // Tab content
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                // Each tab is wrapped in a Builder so its sort → filter →
-                // search → group pipeline runs when TabBarView actually builds
-                // that page, not eagerly for all ~8 tabs on every rebuild.
-                children: [
-                  for (final name in tabNames)
-                    Builder(
-                      builder:
-                          (_) =>
-                              _buildTasksForTab(name, grouping, sorting, query),
-                    ),
-                ],
+              child: Selector<DataProvider, int>(
+                selector: (_, data) => data.taskRevision,
+                builder: (context, _, __) {
+                  final tabNames = _tabNames();
+                  _rebuildTaskIndex();
+                  return TabBarView(
+                    controller: _tabController,
+                    // Each tab is wrapped in a Builder so its sort → filter →
+                    // search → group pipeline runs when TabBarView actually
+                    // builds that page, not eagerly for all ~8 tabs.
+                    children: [
+                      for (final name in tabNames)
+                        Builder(
+                          builder:
+                              (_) => _buildTasksForTab(
+                                name,
+                                grouping,
+                                sorting,
+                                query,
+                              ),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
           ],
@@ -570,37 +615,42 @@ class _TaskPageState extends State<TaskPage>
           ),
           const SizedBox(height: 10),
           // AnimatedSwitcher hides the FAB cleanly during completion animation
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child:
-                isDuringAnimation
-                    ? const SizedBox(
-                      key: ValueKey('hidden'),
-                      height: 56,
-                      width: 56,
-                    )
-                    : FloatingActionButton(
-                      key: const ValueKey('visible'),
-                      heroTag: "Completed_Tasks",
-                      tooltip:
-                          showCompletedTasks
-                              ? 'Hide completed'
-                              : 'Show completed',
-                      onPressed:
-                          () => setState(
-                            () => showCompletedTasks = !showCompletedTasks,
+          ValueListenableBuilder<bool>(
+            valueListenable: _isDuringAnimation,
+            builder:
+                (context, isDuringAnimation, _) => AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child:
+                      isDuringAnimation
+                          ? const SizedBox(
+                            key: ValueKey('hidden'),
+                            height: 56,
+                            width: 56,
+                          )
+                          : FloatingActionButton(
+                            key: const ValueKey('visible'),
+                            heroTag: "Completed_Tasks",
+                            tooltip:
+                                showCompletedTasks
+                                    ? 'Hide completed'
+                                    : 'Show completed',
+                            onPressed:
+                                () => setState(
+                                  () =>
+                                      showCompletedTasks = !showCompletedTasks,
+                                ),
+                            backgroundColor: context.appColors.accent,
+                            foregroundColor: context.appColors.onAccent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: Icon(
+                              showCompletedTasks
+                                  ? Icons.close_rounded
+                                  : Icons.check_rounded,
+                            ),
                           ),
-                      backgroundColor: context.appColors.accent,
-                      foregroundColor: context.appColors.onAccent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      child: Icon(
-                        showCompletedTasks
-                            ? Icons.close_rounded
-                            : Icons.check_rounded,
-                      ),
-                    ),
+                ),
           ),
         ],
       ),
@@ -731,29 +781,41 @@ class _TaskPageState extends State<TaskPage>
     SortingMode sorting,
     String query,
   ) {
-    // Filter first, then sort once — the old pipeline sorted the whole
-    // "All" list, filtered it, then sorted the survivors again.
-    Iterable<Task> source;
-    if (name == "All") {
-      source = db.toDoList;
-    } else if (db.categories.contains(name)) {
-      source = db.toDoList.where((t) => t.category == name);
-    } else if (["High", "Medium", "Low"].contains(name)) {
-      source = db.toDoList.where((t) => t.priority == name);
+    final cacheKey = _tabCacheKey();
+    final cached = _tabCache[name];
+    final Map<String, List<Task>> grouped;
+    if (cached != null && cached.key == cacheKey) {
+      grouped = cached.grouped;
     } else {
-      source = const [];
+      // Filter first, then sort once — the old pipeline sorted the whole
+      // "All" list, filtered it, then sorted the survivors again.
+      Iterable<Task> source;
+      if (name == "All") {
+        source = db.toDoList;
+      } else if (db.categories.contains(name)) {
+        source = db.toDoList.where((t) => t.category == name);
+      } else if (["High", "Medium", "Low"].contains(name)) {
+        source = db.toDoList.where((t) => t.priority == name);
+      } else {
+        source = const [];
+      }
+
+      List<Task> tasksOfThisTab =
+          source.where((t) => t.completed == showCompletedTasks).toList();
+      tasksOfThisTab = SearchTasks.searchByQuery(query, tasksOfThisTab);
+      tasksOfThisTab = SortTasksService.sortTasksByMode(
+        tasksOfThisTab,
+        sorting,
+      );
+
+      grouped = GroupTasksService.groupTasksByMode(
+        tasksOfThisTab,
+        grouping,
+        showCompletedTasks,
+      );
+      debugTabComputations++;
+      _tabCache[name] = (key: cacheKey, grouped: grouped);
     }
-
-    List<Task> tasksOfThisTab =
-        source.where((t) => t.completed == showCompletedTasks).toList();
-    tasksOfThisTab = SearchTasks.searchByQuery(query, tasksOfThisTab);
-    tasksOfThisTab = SortTasksService.sortTasksByMode(tasksOfThisTab, sorting);
-
-    final Map<String, List<Task>> grouped = GroupTasksService.groupTasksByMode(
-      tasksOfThisTab,
-      grouping,
-      showCompletedTasks,
-    );
 
     // Empty state
     if (grouped.isEmpty) {
@@ -907,13 +969,13 @@ class _TaskPageState extends State<TaskPage>
                       if (newIndex > oldIndex) newIndex -= 1;
                       final int from = db.toDoList.indexOf(tasks[oldIndex]);
                       final int to = db.toDoList.indexOf(tasks[newIndex]);
-                      final task = db.toDoList.removeAt(from);
-                      db.toDoList.insert(to, task);
-                      // Reorder changes every key from `to`
-                      // onward — full task-box rewrite required.
-                      db.saveToDoList();
-                      sortingProvider.setMode(SortingMode.manual);
-                      setState(() {});
+                      // One record is rewritten: the moved task gets an
+                      // order between its new neighbours.
+                      db.moveTask(from, to);
+                      if (sortingProvider.mode != SortingMode.manual) {
+                        sortingProvider.setMode(SortingMode.manual);
+                      }
+                      _tasksChanged();
                     },
                     itemBuilder:
                         (context, index) => ReorderableDelayedDragStartListener(
@@ -945,9 +1007,7 @@ class _TaskPageState extends State<TaskPage>
     return TaskTile(
       source: task.source,
       disableCompleted: () {
-        setState(() {
-          isDuringAnimation = !isDuringAnimation;
-        });
+        _isDuringAnimation.value = !_isDuringAnimation.value;
       },
       initialSubtasks: task.subtasks.map((s) => s.toMap()).toList(),
       index: _indexOfTask[task] ?? db.toDoList.indexOf(task),
@@ -1307,44 +1367,70 @@ class _TaskPageState extends State<TaskPage>
   Future<void> importViewOnly() async {
     final syncProvider = context.read<CalendarSyncProvider>();
 
+    // Sign-in is restored in the background after the first frame; wait for
+    // it so the first sync does not run signed out.
+    await AppStartup.ready;
+    if (!mounted) return;
+
     final String localCalendarId = db.syncToCalendars["local"];
     final String outlookCalendarId = db.syncToCalendars["outlook"];
     final String googleCalendarId = db.syncToCalendars["google"];
 
-    if (localCalendarId == "none" &&
-        outlookCalendarId == "none" &&
-        googleCalendarId == "none") {
-      return;
+    // A provider that is switched off must not keep showing cached events.
+    var clearedAny = false;
+    if (localCalendarId == "none" && db.localCalTasks.isNotEmpty) {
+      await db.clearLocalCalTasks();
+      clearedAny = true;
     }
+    if (outlookCalendarId == "none" && db.outlookCalTasks.isNotEmpty) {
+      await db.clearOutlookCalTasks();
+      clearedAny = true;
+    }
+    if (googleCalendarId == "none" && db.googleCalTasks.isNotEmpty) {
+      await db.clearGoogleCalTasks();
+      clearedAny = true;
+    }
+    if (clearedAny && mounted) _tasksChanged();
+
+    // One job per linked provider. They touch separate lists and boxes, so
+    // they run together: the sync takes as long as the slowest provider, and
+    // there are no artificial delays between them.
+    final jobs = <Future<void> Function()>[
+      if (localCalendarId != "none")
+        () => LocalCalendarService.syncTasksFromCalendar(db),
+      if (outlookCalendarId != "none")
+        () async {
+          await OutlookAuthService.acquireTokenSilently();
+          await OutlookCalendarService.syncTasksFromCalendar(db);
+        },
+      if (googleCalendarId != "none")
+        () async {
+          await GoogleAuthService.ensureApisReady();
+          await GoogleCalendarService.syncTasksFromCalendars(db);
+        },
+    ];
+    if (jobs.isEmpty) return;
 
     syncProvider.startSync();
-
-    if (localCalendarId != "none") {
-      try {
-        await LocalCalendarService.syncTasksFromCalendar(db);
-        syncProvider.updateProgress(0.3);
-      } catch (_) {}
-      await Future.delayed(const Duration(milliseconds: 1000));
-    }
-    if (outlookCalendarId != "none") {
-      try {
-        await OutlookCalendarService.syncTasksFromCalendar(db);
-        syncProvider.updateProgress(0.5);
-      } catch (_) {}
-      await Future.delayed(const Duration(milliseconds: 1000));
-    }
-    if (googleCalendarId != "none") {
-      try {
-        await GoogleCalendarService.syncTasksFromCalendars(db);
-        syncProvider.updateProgress(0.8);
-      } catch (_) {}
-      await Future.delayed(const Duration(milliseconds: 1000));
-    }
-
+    var finished = 0;
+    await Future.wait([
+      for (final job in jobs)
+        () async {
+          try {
+            await job();
+          } catch (_) {
+            // One provider failing (offline, signed out) must not stop the
+            // others; its cached events are kept.
+          }
+          finished++;
+          syncProvider.updateProgress(finished / jobs.length);
+        }(),
+    ]);
     syncProvider.finishSync();
 
     // Fix: guard against widget being disposed after the awaits above
     if (!mounted) return;
+    _tasksChanged(); // calendar events changed
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text("Calendar synced successfully"),

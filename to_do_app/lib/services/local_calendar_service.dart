@@ -301,7 +301,7 @@ class LocalCalendarService {
       );
     }
 
-    await db.updateDataBase();
+    await db.saveToDoList();
   }
 
   // static Future<void> importToDoCalendarEventsToDB(
@@ -457,15 +457,22 @@ class LocalCalendarService {
     final calID = db.syncToCalendars["local"];
     //db.localCalTasks.removeWhere((t) => t[14] == calID);
     List<dynamic> events = await getEvents(calID);
-    await importViewOnlyEventsToDB(events, db);
+    await importViewOnlyEventsToDB(events, db, replace: true);
   }
 
+  ///
+  /// With [replace], the cached local-calendar events are swapped for exactly
+  /// [events] (see GoogleCalendarService.importViewOnlyEventsToDB).
   static Future<void> importViewOnlyEventsToDB(
     List<dynamic>? events,
-    ToDoDataBase db,
-  ) async {
-    db.loadData();
+    ToDoDataBase db, {
+    bool replace = false,
+  }) async {
+    // No db.loadData() here: it replaced every in-memory list with the disk
+    // copy mid-sync, which is unsafe now that providers sync concurrently.
+    if (replace && events != null) db.localCalTasks.clear();
     if (events == null || events.isEmpty) {
+      if (replace && events != null) await db.saveLocalCalTasks();
       return;
     }
 
@@ -559,7 +566,7 @@ class LocalCalendarService {
       );
     }
 
-    await db.updateDataBase();
+    await db.saveLocalCalTasks();
   }
 
   static String _repeatTypeFromRule(RecurrenceRule? rule) {

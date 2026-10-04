@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:timezone/data/latest.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
 import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/pages/calendar_page.dart';
 import 'package:to_do_app/pages/filtered_tasks_page.dart';
@@ -25,50 +23,61 @@ import 'package:to_do_app/providers/searching_provider.dart';
 import 'services/notification_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:to_do_app/config/app_config.dart';
-import 'package:to_do_app/utils/date_time_utils.dart';
+import 'package:to_do_app/services/app_startup.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final ToDoDataBase db = ToDoDataBase();
 String? path;
 
-Future<void> initLocalTimeZone() async {
-  if (db.settings.timeZoneManuallySet) {
-    final manual = DateTimeUtilsHelper.locationFromTimeZoneLabel(
-      db.settings.timeZoneLabel,
-    );
-    if (manual != null) {
-      tz.setLocalLocation(manual);
-      return;
-    }
-    // Unrecognized label (e.g. corrupted data) — fall through to auto-detect.
-  }
-  try {
-    final tzInfo = await FlutterTimezone.getLocalTimezone();
-    final tzName = tzInfo.identifier;
-    final location = tz.getLocation(tzName);
-    tz.setLocalLocation(location);
-    db.settings = db.settings.copyWith(timeZoneLabel: tzName);
-    db.saveSettings();
-  } catch (e) {
-    tz.setLocalLocation(tz.getLocation('UTC'));
-  }
+/// Slow, network-bound start-up work. Runs after the first frame is on its
+/// way; screens that need it await [AppStartup.ready].
+Future<void> _initServices(AuthProvider auth, DataProvider data) async {
+  await Future.wait([
+    AppStartup.guard(
+      () => Supabase.initialize(
+        url: AppConfig.supabaseUrl,
+        anonKey: AppConfig.supabaseAnonKey,
+      ),
+    ),
+    AppStartup.guard(() async {
+      await GoogleAuthService.initApp();
+      final user = GoogleAuthService.currentUser;
+      if (user != null) {
+        auth.setGoogleSignedIn(
+          true,
+          displayName: user.displayName ?? '',
+          email: user.email,
+          photoUrl: user.photoUrl ?? '',
+        );
+      }
+    }),
+    AppStartup.guard(() async {
+      await OutlookAuthService.initialize();
+      if (OutlookAuthService.accessToken != null) {
+        auth.setOutlookSignedIn(true);
+      }
+    }),
+    AppStartup.guard(NotificationService.init),
+    AppStartup.guard(() async {
+      // Times already on screen were computed with the saved zone; refresh
+      // them only if detection found the device has moved.
+      if (await AppStartup.detectTimeZone(db)) data.markTasksChanged();
+    }),
+  ]);
+
+  // Scheduling needs both the notification plugin and the final time zone.
+  await AppStartup.guard(
+    () => NotificationService.scheduleDailySummaryNotifications(db),
+  );
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
 
-  await Supabase.initialize(
-    url: AppConfig.supabaseUrl,
-    anonKey: AppConfig.supabaseAnonKey,
-  );
-
+  // Only what the first screen needs: local data.
   await Hive.initFlutter();
-  await Hive.openBox('mybox'); // legacy box for one-time migration
   await db.openBoxes();
-  await db.clearLocalCalTasks();
-  await db.clearGoogleCalTasks();
-  await db.clearOutlookCalTasks();
   path = db.boxPath;
 
   if (db.isFreshInstall) {
@@ -78,27 +87,13 @@ void main() async {
     db.loadData();
   }
   db.runMigrations();
+  AppStartup.applySavedTimeZone(db);
 
-  await GoogleAuthService.initApp();
-  await OutlookAuthService.initialize();
+  // Signed out until the background restore below finishes; it updates this.
+  final authProvider = AuthProvider();
+  final dataProvider = DataProvider(db);
 
-  final authProvider = AuthProvider(
-    isGoogleSignedIn: GoogleAuthService.currentUser != null,
-    isOutlookSignedIn: OutlookAuthService.accessToken != null,
-    displayName: GoogleAuthService.currentUser?.displayName ?? '',
-    email: GoogleAuthService.currentUser?.email ?? '',
-    photoUrl: GoogleAuthService.currentUser?.photoUrl ?? '',
-  );
-
-  try {
-    await NotificationService.init();
-  } catch (_) {}
-
-  await initLocalTimeZone();
-
-  try {
-    await NotificationService.scheduleDailySummaryNotifications(db);
-  } catch (_) {}
+  AppStartup.ready = _initServices(authProvider, dataProvider);
 
   runApp(
     MultiProvider(
@@ -108,7 +103,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => CalendarSyncProvider()),
         ChangeNotifierProvider(create: (_) => FileSearchProvider()),
         ChangeNotifierProvider.value(value: authProvider),
-        ChangeNotifierProvider(create: (_) => DataProvider(db)),
+        ChangeNotifierProvider.value(value: dataProvider),
       ],
       child: const MyApp(),
     ),

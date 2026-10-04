@@ -26,7 +26,6 @@ class OutlookCalendarSyncPage extends StatefulWidget {
 }
 
 class _OutlookCalendarSyncPageState extends State<OutlookCalendarSyncPage> {
-
   bool? syncToCalendar = false;
   late Map<String, bool> importCalendars = {};
   late Map<String, bool> syncCalendars = {};
@@ -162,7 +161,11 @@ class _OutlookCalendarSyncPageState extends State<OutlookCalendarSyncPage> {
     } else {
       widget.db.syncToCalendars["outlook"] = "none";
     }
-    widget.db.updateDataBase();
+    // Sync settings plus the tasks (pushing to the calendar records event ids
+    // on them). The calendar boxes were already saved by the import itself.
+    widget.db.saveSyncToCalendars();
+    widget.db.saveViewOnlyCalendars();
+    await widget.db.saveToDoList();
     if (!mounted) return;
     context.read<CalendarSyncProvider>().notify();
     setState(() {

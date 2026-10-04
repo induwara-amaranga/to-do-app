@@ -101,7 +101,9 @@ class _OutlookCalendarTileState extends State<OutlookCalendarTile> {
   Future<void> _disableSync() async {
     widget.db.syncToCalendars["outlook"] = "none";
     widget.db.viewOnlyCalendars["outlook"] = {};
-    widget.db.updateDataBase();
+    // Only the sync settings changed; the next launch clears the cached events.
+    widget.db.saveSyncToCalendars();
+    widget.db.saveViewOnlyCalendars();
     setState(() {});
   }
 

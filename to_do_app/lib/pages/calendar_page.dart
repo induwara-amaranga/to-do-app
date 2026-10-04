@@ -1,3 +1,5 @@
+import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 //import 'package:googleapis/cloudsearch/v1.dart';
 import 'package:table_calendar/table_calendar.dart';
@@ -39,7 +41,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   bool _isStarred = false;
 
-  void checkBoxChanged(bool? value, int index) {
+  void checkBoxChanged(bool? value, int index) async {
     if (value != null) {
       if (value) {
         db.toDoList[index].completedAt = DateTime.now().toUtc().toString();
@@ -53,18 +55,25 @@ class _CalendarPageState extends State<CalendarPage> {
       toDoList[index].completed = !toDoList[index].completed;
     });
 
-    // Step 2: handle repeating logic OUTSIDE setState
-    if (value == true && toDoList[index].repeatType != "none") {
-      RepeatTask.createNextRepeatTask(context, index, db);
+    // Step 2: a toggle touches exactly one record, so write only that one
+    // (not every box). Done before the repeat handling below, whose early
+    // returns never reach a save of their own.
+    final bool spawnsRepeat =
+        value == true && toDoList[index].repeatType != "none";
+    await db.saveTaskAt(index);
+
+    // Step 3: handle repeating logic. It appends and persists the next
+    // occurrence itself.
+    if (spawnsRepeat && mounted) {
+      await RepeatTask.createNextRepeatTask(context, index, db);
     }
 
-    // Step 3: refresh lists & persist data
-    setState(() {
-      toDoList = toDoList;
-      //hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
-    });
-
-    db.updateDataBase();
+    // Step 4: refresh lists
+    if (mounted) {
+      setState(() {
+        toDoList = db.toDoList;
+      });
+    }
   }
 
   void saveNewTask(Map<String, dynamic> taskDetails) async {
@@ -95,9 +104,9 @@ class _CalendarPageState extends State<CalendarPage> {
       completedAt: "none",
       notificationIds: [],
     );
-    setState(() {
-      db.toDoList.add(task);
-    });
+    // Appends one record instead of rewriting every box.
+    await db.appendTask(task);
+    if (mounted) setState(() {});
 
     // ⏰ Schedule notification if remainder is set
     if (selectedRemainderAmount >= 0 && selectedRemainderType != "none") {
@@ -110,7 +119,8 @@ class _CalendarPageState extends State<CalendarPage> {
       );
     }
     toDoList = db.toDoList;
-    db.updateDataBase();
+    // Re-save the one record: scheduling the reminder fills in notificationIds.
+    await db.saveTaskAt(db.toDoList.indexOf(task));
     if (db.syncToCalendars["local"] != "none") {
       LocalCalendarService.addEvent(db.syncToCalendars["local"], task);
     }
@@ -124,13 +134,10 @@ class _CalendarPageState extends State<CalendarPage> {
     for (int id in db.toDoList[index].notificationIds) {
       await NotificationService.cancelNotification(id);
     }
-    setState(() {
-      db.toDoList.removeAt(index);
-    });
+    // Deletes one record from the box rather than rewriting every box.
+    await db.removeTaskAt(index);
     toDoList = db.toDoList;
-    db.updateDataBase();
-    if (db.syncToCalendars["local"] != "none" &&
-        db.toDoList[index].remoteEventIds[0] != "") {}
+    if (mounted) setState(() {});
   }
 
   void editTask(int index, Map<String, dynamic> taskDetails) async {
@@ -211,7 +218,9 @@ class _CalendarPageState extends State<CalendarPage> {
         db.toDoList[index],
       );
     }
-    db.updateDataBase();
+    // An edit rewrites one record in place.
+    await db.saveTaskAt(index);
+    if (mounted) setState(() {});
   }
 
   List<CalendarEvent> _getCalTasksForDay(DateTime day) {
@@ -298,7 +307,28 @@ class _CalendarPageState extends State<CalendarPage> {
   final List<({String? date, String? time, String? repeat, bool done})>
   _repeating = [];
 
+  // The index (and the task-position map) is rebuilt only when the data or
+  // the time zone changed. Every setState used to re-scan every task and
+  // event with a time-zone conversion each, including a plain day tap.
+  int _indexedRevision = -1;
+
+  /// How many times the day index was rebuilt (for tests).
+  @visibleForTesting
+  int debugIndexBuilds = 0;
+  String _indexedZone = '';
+  Map<Task, int> _indexOfTask = Map.identity();
+
   void _indexDays() {
+    final zone = tz.local.name;
+    if (_indexedRevision == db.dataRevision && _indexedZone == zone) return;
+    _indexedRevision = db.dataRevision;
+    _indexedZone = zone;
+    debugIndexBuilds++;
+
+    _indexOfTask = Map.identity();
+    for (int i = 0; i < db.toDoList.length; i++) {
+      _indexOfTask[db.toDoList[i]] = i;
+    }
     _dueDays.clear();
     _repeating.clear();
     void add(String? date, String? time, String? repeat, bool done) {
@@ -343,6 +373,95 @@ class _CalendarPageState extends State<CalendarPage> {
     return false;
   }
 
+  /// The selected day's tasks and calendar events. Built lazily: only the
+  /// rows on screen are created, however many tasks fall on the day.
+  Widget _buildDayList() {
+    final rows = <Widget Function()>[
+      if (tasksForSelectedDay.isNotEmpty)
+        () => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(
+            'Tasks',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: context.appColors.accent,
+            ),
+          ),
+        ),
+      for (final task in tasksForSelectedDay) () => _buildTaskRow(task),
+      if (calTasksForSelectedDay.isNotEmpty) ...[
+        () => CalendarEventsHeader(
+          count: calTasksForSelectedDay.length,
+          collapsed: db.settings.calendarEventsCollapsed,
+          onToggle: _toggleCalendarEvents,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        ),
+        () => AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          alignment: Alignment.topCenter,
+          child:
+              db.settings.calendarEventsCollapsed
+                  ? const SizedBox(width: double.infinity)
+                  : Column(
+                    children: [
+                      for (final task in calTasksForSelectedDay)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          child: SyncTile(task: task, settings: db.settings),
+                        ),
+                    ],
+                  ),
+        ),
+      ],
+    ];
+    return ListView.builder(
+      itemCount: rows.length,
+      itemBuilder: (context, i) => rows[i](),
+    );
+  }
+
+  Widget _buildTaskRow(Task task) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: TaskTile(
+        source: task.source,
+        disableCompleted: () {
+          setState(() {});
+        },
+        key: ObjectKey(task),
+        initialSubtasks: task.subtasks.map((s) => s.toMap()).toList(),
+        index: _indexOfTask[task] ?? toDoList.indexOf(task),
+        isStarred: task.isStarred,
+        taskName: task.name,
+        taskCompleted: task.completed,
+        taskNote: task.note ?? '',
+        dueDate: DateTimeUtilsHelper.parseDate(task.dueDate),
+        dueTime:
+            task.dueTime != "00:00"
+                ? DateTimeUtilsHelper.parseTime(task.dueTime!)
+                : null,
+        taskCategory: task.category,
+        taskPriority: task.priority,
+        repeatType: task.repeatType!,
+        remainderAmount: task.reminderAmount,
+        remainderType: task.reminderType!,
+        onChanged: (index, value) => checkBoxChanged(value, index),
+        deleteFunction: (context) => deleteTask(toDoList.indexOf(task)),
+        onEdit: (index, taskDetails) => editTask(index, taskDetails),
+        repeatTypes: repeatTypes,
+        priorityTypes: priorityTypes,
+        remainderTypes: remainderTypes,
+        categoryTypes: widget.db.categories,
+        playCompletionTone: db.settings.completionTone,
+        playCompletionAnimation: db.settings.completionAnimation,
+        settings: db.settings,
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -355,7 +474,6 @@ class _CalendarPageState extends State<CalendarPage> {
 
   @override
   Widget build(BuildContext context) {
-    focusedDay = DateTime.now();
     _indexDays();
     return Scaffold(
       bottomNavigationBar: TaskBottomNavBar(current: 0),
@@ -490,6 +608,10 @@ class _CalendarPageState extends State<CalendarPage> {
               focusedDay: focusedDay,
               firstDay: firstDay,
               lastDay: lastDay,
+              // Remember the page the user swiped to. Without this the next
+              // rebuild would hand the calendar the old focusedDay and snap
+              // it back. No setState: the calendar already shows this page.
+              onPageChanged: (day) => focusedDay = day,
               onDaySelected: (selectedDay, focusedDay) {
                 setState(() {
                   this.selectedDay = selectedDay;
@@ -507,113 +629,7 @@ class _CalendarPageState extends State<CalendarPage> {
             ),
           ),
           SizedBox(height: 20),
-          Expanded(
-            child: ListView(
-              children: [
-                if (tasksForSelectedDay.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Text(
-                      'Tasks',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: context.appColors.accent,
-                      ),
-                    ),
-                  ),
-                ...() {
-                  // Position lookup built once, not an O(n) indexOf per tile.
-                  final indexOfTask = Map<Task, int>.identity();
-                  for (int i = 0; i < toDoList.length; i++) {
-                    indexOfTask[toDoList[i]] = i;
-                  }
-                  return tasksForSelectedDay.map((task) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 4,
-                        horizontal: 8,
-                      ),
-                      child: TaskTile(
-                        source: task.source,
-                        disableCompleted: () {
-                          setState(() {});
-                        },
-                        key: ObjectKey(task),
-                        initialSubtasks:
-                            task.subtasks.map((s) => s.toMap()).toList(),
-                        index: indexOfTask[task] ?? toDoList.indexOf(task),
-                        isStarred: task.isStarred,
-                        taskName: task.name,
-                        taskCompleted: task.completed,
-                        taskNote: task.note ?? '',
-                        dueDate: DateTimeUtilsHelper.parseDate(task.dueDate),
-                        dueTime:
-                            task.dueTime != "00:00"
-                                ? DateTimeUtilsHelper.parseTime(task.dueTime!)
-                                : null,
-                        taskCategory: task.category,
-                        taskPriority: task.priority,
-                        repeatType: task.repeatType!,
-                        remainderAmount: task.reminderAmount,
-                        remainderType: task.reminderType!,
-                        onChanged:
-                            (index, value) => checkBoxChanged(value, index),
-                        deleteFunction:
-                            (context) => deleteTask(toDoList.indexOf(task)),
-                        onEdit:
-                            (index, taskDetails) =>
-                                editTask(index, taskDetails),
-                        repeatTypes: repeatTypes,
-                        priorityTypes: priorityTypes,
-                        remainderTypes: remainderTypes,
-                        categoryTypes: widget.db.categories,
-                        playCompletionTone: db.settings.completionTone,
-                        playCompletionAnimation:
-                            db.settings.completionAnimation,
-                        settings: db.settings,
-                      ),
-                    );
-                  });
-                }(),
-                if (calTasksForSelectedDay.isNotEmpty) ...[
-                  CalendarEventsHeader(
-                    count: calTasksForSelectedDay.length,
-                    collapsed: db.settings.calendarEventsCollapsed,
-                    onToggle: _toggleCalendarEvents,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                  ),
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 200),
-                    alignment: Alignment.topCenter,
-                    child:
-                        db.settings.calendarEventsCollapsed
-                            ? const SizedBox(width: double.infinity)
-                            : Column(
-                              children: [
-                                for (final task in calTasksForSelectedDay)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    child: SyncTile(
-                                      task: task,
-                                      settings: db.settings,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+          Expanded(child: _buildDayList()),
           //SizedBox(height: 30),
         ],
       ),

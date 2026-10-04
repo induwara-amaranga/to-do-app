@@ -13,6 +13,7 @@ import 'package:to_do_app/components/task_tile.dart';
 import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/models/grouping_mode.dart';
 import 'package:to_do_app/models/sorting_mode.dart';
+import 'package:to_do_app/models/settings.dart';
 import 'package:to_do_app/models/sub_task.dart';
 import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/pages/task_page.dart';
@@ -24,6 +25,7 @@ import 'package:to_do_app/providers/searching_provider.dart';
 import 'package:to_do_app/providers/sorting_provider.dart';
 import 'package:to_do_app/providers/view_provider.dart';
 import 'package:to_do_app/services/filter_tasks_service.dart';
+import 'package:to_do_app/services/past_task_cleanup.dart';
 import 'package:to_do_app/services/group_tasks_service.dart';
 import 'package:to_do_app/services/repeat_task.dart';
 import 'package:to_do_app/services/search_tasks.dart';
@@ -33,7 +35,7 @@ import 'package:to_do_app/utils/date_time_utils.dart';
 
 import '../helpers/test_data.dart';
 
-const int kCount = 1000;
+const int kCount = 2000;
 
 /// Deterministic mock data: mixed categories, priorities, due dates from a
 /// year ago to a year ahead, ~30% completed, ~10% starred, some with notes
@@ -53,7 +55,8 @@ List<Task> mockTasks({int count = kCount, int todayCount = 0}) {
 
   return List.generate(count, (i) {
     final isToday = i < todayCount;
-    final due = isToday ? utcDay(0) : _day(base.add(Duration(days: next(730) - 365)));
+    final due =
+        isToday ? localDay(0) : _day(base.add(Duration(days: next(730) - 365)));
     final hour = next(24).toString().padLeft(2, '0');
     final minute = (next(4) * 15).toString().padLeft(2, '0');
     return makeTask(
@@ -65,9 +68,11 @@ List<Task> mockTasks({int count = kCount, int todayCount = 0}) {
       completed: !isToday && next(10) < 3,
       isStarred: next(10) == 0,
       note: next(2) == 0 ? 'note about ${words[next(words.length)]}' : null,
-      createdAt:
-          base.add(Duration(hours: next(8000))).toIso8601String(),
-      subtasks: next(4) == 0 ? [SubTask(name: 'sub a'), SubTask(name: 'sub b')] : null,
+      createdAt: base.add(Duration(hours: next(8000))).toIso8601String(),
+      subtasks:
+          next(4) == 0
+              ? [SubTask(name: 'sub a'), SubTask(name: 'sub b')]
+              : null,
     );
   });
 }
@@ -88,7 +93,9 @@ double measure(String label, void Function() body, {int runs = 3}) {
     if (ms < best) best = ms;
   }
   // ignore: avoid_print
-  print('[perf] ${label.padRight(46)} ${best.toStringAsFixed(2).padLeft(9)} ms');
+  print(
+    '[perf] ${label.padRight(46)} ${best.toStringAsFixed(2).padLeft(9)} ms',
+  );
   return best;
 }
 
@@ -111,7 +118,11 @@ void main() {
   test('mock data has the expected shape', () {
     expect(tasks.length, kCount);
     expect(tasks.map((t) => t.id).toSet().length, kCount);
-    expect(tasks.where((t) => t.completed).length, inInclusiveRange(200, 400));
+    // Roughly a third are completed, whatever kCount is.
+    expect(
+      tasks.where((t) => t.completed).length,
+      inInclusiveRange(kCount * 0.2, kCount * 0.45),
+    );
     expect(tasks.map((t) => t.category).toSet().length, 5);
   });
 
@@ -153,7 +164,10 @@ void main() {
     });
 
     test('search by name and note', () {
-      final ms = measure('search "milk"', () => SearchTasks.searchByQuery('milk', tasks));
+      final ms = measure(
+        'search "milk"',
+        () => SearchTasks.searchByQuery('milk', tasks),
+      );
       expect(ms, lessThan(100));
       final noHit = measure(
         'search (no match)',
@@ -188,9 +202,13 @@ void main() {
 
     test('the full tab pipeline (filter, search, sort, group)', () {
       final ms = measure('filter+search+sort+group', () {
-        var list = tasks.where((t) => !t.completed && t.category == 'Work').toList();
+        var list =
+            tasks.where((t) => !t.completed && t.category == 'Work').toList();
         list = SearchTasks.searchByQuery('task', list);
-        list = SortTasksService.sortTasksByMode(list, SortingMode.dueDateIncreasing);
+        list = SortTasksService.sortTasksByMode(
+          list,
+          SortingMode.dueDateIncreasing,
+        );
         GroupTasksService.groupTasksByMode(list, GroupingMode.Default, false);
       });
       expect(ms, lessThan(300));
@@ -201,17 +219,35 @@ void main() {
       final large = mockTasks(count: 1000);
       final tSmall = measure(
         'sort due date x250',
-        () => SortTasksService.sortTasksByMode(small, SortingMode.dueDateIncreasing),
+        () => SortTasksService.sortTasksByMode(
+          small,
+          SortingMode.dueDateIncreasing,
+        ),
         runs: 5,
       );
       final tLarge = measure(
         'sort due date x1000',
-        () => SortTasksService.sortTasksByMode(large, SortingMode.dueDateIncreasing),
+        () => SortTasksService.sortTasksByMode(
+          large,
+          SortingMode.dueDateIncreasing,
+        ),
         runs: 5,
       );
       // 4x the data: n log n predicts ~5x; quadratic would be 16x. Allow a
       // wide margin (and a floor, since sub-millisecond timings are noise).
       expect(tLarge, lessThan(tSmall * 12 + 5));
+    });
+
+    test('picking the past tasks to remove from 5000 tasks', () {
+      final big = mockTasks(count: 5000);
+      final ms = measure(
+        'selectRemovable keep 500 (5000 tasks)',
+        () => PastTaskCleanup.selectRemovable(big, 500),
+      );
+      expect(ms, lessThan(300));
+      final doomed = PastTaskCleanup.selectRemovable(big, 500);
+      expect(doomed.length, greaterThan(0));
+      expect(doomed.toSet().length, doomed.length);
     });
 
     test('date parsing is cached', () {
@@ -224,25 +260,24 @@ void main() {
       }
       cold.stop();
       // ignore: avoid_print
-      print('[perf] ${'parseDate x${dates.length * 20}'.padRight(46)} '
-          '${(cold.elapsedMicroseconds / 1000).toStringAsFixed(2).padLeft(9)} ms');
+      print(
+        '[perf] ${'parseDate x${dates.length * 20}'.padRight(46)} '
+        '${(cold.elapsedMicroseconds / 1000).toStringAsFixed(2).padLeft(9)} ms',
+      );
       expect(cold.elapsedMilliseconds, lessThan(500));
     });
 
     test('time zone conversion of every task', () {
-      final ms = measure(
-        'toLocalUsingTz x$kCount',
-        () {
-          for (final t in tasks) {
-            DateTimeUtilsHelper.toLocalUsingTz(
-              DateTimeUtilsHelper.combineDateAndTimeFromStrings(
-                t.dueDate!,
-                t.dueTime!,
-              ),
-            );
-          }
-        },
-      );
+      final ms = measure('toLocalUsingTz x$kCount', () {
+        for (final t in tasks) {
+          DateTimeUtilsHelper.toLocalUsingTz(
+            DateTimeUtilsHelper.combineDateAndTimeFromStrings(
+              t.dueDate!,
+              t.dueTime!,
+            ),
+          );
+        }
+      });
       expect(ms, lessThan(300));
     });
   });
@@ -268,13 +303,17 @@ void main() {
 
     test('load from disk', () async {
       await db.saveToDoList();
-      final ms = await measureAsync('loadToDoList x$kCount', () async => db.loadToDoList());
+      final ms = await measureAsync(
+        'loadToDoList x$kCount',
+        () async => db.loadToDoList(),
+      );
       expect(ms, lessThan(1000));
       expect(db.toDoList.length, kCount);
     });
 
     test('data survives a save and reload intact', () async {
-      final expected = db.toDoList.map((t) => '${t.id}|${t.name}|${t.dueDate}').toList();
+      final expected =
+          db.toDoList.map((t) => '${t.id}|${t.name}|${t.dueDate}').toList();
       await db.saveToDoList();
       db.loadToDoList();
       expect(
@@ -297,8 +336,14 @@ void main() {
       }
       final avg = times.reduce((a, b) => a + b) / times.length;
       // ignore: avoid_print
-      print('[perf] ${'saveTaskAt (avg of 10)'.padRight(46)} ${avg.toStringAsFixed(2).padLeft(9)} ms');
-      expect(avg, lessThan(full), reason: 'per-record save should beat a rewrite');
+      print(
+        '[perf] ${'saveTaskAt (avg of 10)'.padRight(46)} ${avg.toStringAsFixed(2).padLeft(9)} ms',
+      );
+      expect(
+        avg,
+        lessThan(full),
+        reason: 'per-record save should beat a rewrite',
+      );
     });
 
     test('append and remove stay fast on a large box', () async {
@@ -316,6 +361,55 @@ void main() {
       expect(db.toDoList.length, kCount);
     });
 
+    test('drag-reorder and undo-delete beat a full rewrite', () async {
+      await db.saveToDoList();
+      final full = await measureAsync(
+        'full rewrite (reference)',
+        db.saveToDoList,
+      );
+
+      final move = await measureAsync('moveTask (1000 tasks)', () async {
+        for (var i = 0; i < 20; i++) {
+          await db.moveTask(900 - i, 100 + i);
+        }
+      });
+      final undo = await measureAsync(
+        'delete + undo x20 (1000 tasks)',
+        () async {
+          for (var i = 0; i < 20; i++) {
+            final t = db.toDoList[500];
+            await db.removeTaskAt(500);
+            await db.insertTaskAt(500, t);
+          }
+        },
+      );
+      // 20 moves / 20 delete+undo pairs should still cost less than 20 full
+      // rewrites would; each is a single record write.
+      expect(move, lessThan(full * 20));
+      expect(undo, lessThan(full * 20));
+      expect(db.toDoList.length, kCount);
+    });
+
+    test('removing 4500 old tasks in one batch', () async {
+      db.toDoList = mockTasks(count: 5000);
+      await db.saveToDoList();
+      db.settings = const AppSettings(keepLatestPastTasks: 500);
+      final before = db.toDoList.length;
+      late int removed;
+      final ms = await measureAsync(
+        'PastTaskCleanup.run (5000 tasks)',
+        () async {
+          removed = await PastTaskCleanup.run(db);
+        },
+      );
+      expect(removed, greaterThan(0));
+      expect(db.toDoList.length, before - removed);
+      expect(ms, lessThan(5000));
+      // Gone from disk too.
+      db.loadToDoList();
+      expect(db.toDoList.length, before - removed);
+    });
+
     test('100 sequential per-task saves', () async {
       await db.saveToDoList();
       final ms = await measureAsync('100x saveTaskAt', () async {
@@ -327,10 +421,19 @@ void main() {
     });
 
     test('calendar boxes with 1000 events each', () async {
-      db.localCalTasks = List.generate(kCount, (i) => makeEvent('l$i', source: 'local'));
+      db.localCalTasks = List.generate(
+        kCount,
+        (i) => makeEvent('l$i', source: 'local'),
+      );
       db.googleCalTasks = List.generate(kCount, (i) => makeEvent('g$i'));
-      db.outlookCalTasks = List.generate(kCount, (i) => makeEvent('o$i', source: 'outlook'));
-      final ms = await measureAsync('updateDataBase (1000 tasks + 3000 events)', db.updateDataBase);
+      db.outlookCalTasks = List.generate(
+        kCount,
+        (i) => makeEvent('o$i', source: 'outlook'),
+      );
+      final ms = await measureAsync(
+        'updateDataBase (1000 tasks + 3000 events)',
+        db.updateDataBase,
+      );
       expect(ms, lessThan(10000));
     });
 
@@ -362,7 +465,10 @@ void main() {
 
     test('addTask on a large list', () async {
       final provider = DataProvider(env.db);
-      final ms = await measureAsync('DataProvider.addTask', () => provider.addTask(makeTask('x')));
+      final ms = await measureAsync(
+        'DataProvider.addTask',
+        () => provider.addTask(makeTask('x')),
+      );
       expect(ms, lessThan(5000));
       expect(provider.tasks.length, kCount + 1);
     });
@@ -376,22 +482,29 @@ void main() {
       await env.dispose();
     });
 
-    test('100 daily tasks, each a year behind', () async {
-      final ctx = _FakeContext();
-      for (var i = 0; i < 100; i++) {
-        env.db.toDoList.add(
-          makeTask('daily $i', dueDate: utcDay(-365), repeatType: 'daily'),
+    test(
+      '100 daily tasks, each a year behind',
+      () async {
+        final ctx = _FakeContext();
+        for (var i = 0; i < 100; i++) {
+          env.db.toDoList.add(
+            makeTask('daily $i', dueDate: utcDay(-365), repeatType: 'daily'),
+          );
+        }
+        final ms = await measureAsync(
+          'createPendingRepeatTasks (~36k adds)',
+          () async {
+            RepeatTask.createPendingRepeatTasks(env.db, ctx);
+            await pumpEventQueue(times: 60000);
+          },
         );
-      }
-      final ms = await measureAsync('createPendingRepeatTasks (~36k adds)', () async {
-        RepeatTask.createPendingRepeatTasks(env.db, ctx);
-        await pumpEventQueue(times: 60000);
-      });
-      // ~366 occurrences x 100 tasks. The duplicate check is a set lookup;
-      // a list scan per occurrence would be ~36,000 x 36,000 comparisons.
-      expect(env.db.toDoList.length, greaterThan(30000));
-      expect(ms, lessThan(60000));
-    }, timeout: const Timeout(Duration(minutes: 3)));
+        // ~366 occurrences x 100 tasks. The duplicate check is a set lookup;
+        // a list scan per occurrence would be ~36,000 x 36,000 comparisons.
+        expect(env.db.toDoList.length, greaterThan(30000));
+        expect(ms, lessThan(60000));
+      },
+      timeout: const Timeout(Duration(minutes: 3)),
+    );
   });
 
   group('TaskPage rendering ($kCount tasks)', () {
@@ -434,12 +547,16 @@ void main() {
       await t.pumpAndSettle();
       sw.stop();
       // ignore: avoid_print
-      print('[perf] ${'TaskPage first render (300 due today)'.padRight(46)} '
-          '${sw.elapsedMilliseconds.toString().padLeft(9)} ms');
+      print(
+        '[perf] ${'TaskPage first render (300 due today)'.padRight(46)} '
+        '${sw.elapsedMilliseconds.toString().padLeft(9)} ms',
+      );
 
       final built = find.byType(TaskTile).evaluate().length;
       // ignore: avoid_print
-      print('[perf] ${'TaskTile widgets built'.padRight(46)} ${built.toString().padLeft(9)}');
+      print(
+        '[perf] ${'TaskTile widgets built'.padRight(46)} ${built.toString().padLeft(9)}',
+      );
       expect(built, greaterThan(0));
       expect(built, lessThan(60), reason: 'the list must build lazily');
       expect(sw.elapsedMilliseconds, lessThan(10000));
@@ -457,7 +574,9 @@ void main() {
       }
       sw.stop();
       // ignore: avoid_print
-      print('[perf] ${'10 scroll flicks'.padRight(46)} ${sw.elapsedMilliseconds.toString().padLeft(9)} ms');
+      print(
+        '[perf] ${'10 scroll flicks'.padRight(46)} ${sw.elapsedMilliseconds.toString().padLeft(9)} ms',
+      );
       expect(find.byType(TaskTile).evaluate().length, lessThan(60));
       expect(sw.elapsedMilliseconds, lessThan(10000));
     });
@@ -478,7 +597,9 @@ void main() {
       }
       sw.stop();
       // ignore: avoid_print
-      print('[perf] ${'4 keystrokes of search'.padRight(46)} ${sw.elapsedMilliseconds.toString().padLeft(9)} ms');
+      print(
+        '[perf] ${'4 keystrokes of search'.padRight(46)} ${sw.elapsedMilliseconds.toString().padLeft(9)} ms',
+      );
       expect(sw.elapsedMilliseconds, lessThan(5000));
     });
 
@@ -489,8 +610,10 @@ void main() {
       await t.pumpAndSettle();
       sw.stop();
       // ignore: avoid_print
-      print('[perf] ${'TaskPage grouped by day (1000 tasks)'.padRight(46)} '
-          '${sw.elapsedMilliseconds.toString().padLeft(9)} ms');
+      print(
+        '[perf] ${'TaskPage grouped by day (1000 tasks)'.padRight(46)} '
+        '${sw.elapsedMilliseconds.toString().padLeft(9)} ms',
+      );
       expect(find.byType(TaskTile).evaluate().length, lessThan(60));
       expect(sw.elapsedMilliseconds, lessThan(10000));
     });

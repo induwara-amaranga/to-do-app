@@ -32,6 +32,9 @@ class AppSettings {
   /// Accent colour as an ARGB int (default amber 0xFFFFB31A).
   final int accentColor;
 
+  /// Keep only this many past tasks (0 = never remove any).
+  final int keepLatestPastTasks;
+
   /// Appearance and list preferences, restored on launch.
   final bool darkMode;
   final String taskSortMode; // SortingMode.name
@@ -77,6 +80,7 @@ class AppSettings {
     this.defaultDueDate = 'Today',
     this.timeZoneLabel = 'UTC+5:30',
     this.accentColor = 0xFFFFB31A,
+    this.keepLatestPastTasks = 0,
     this.darkMode = false,
     this.taskSortMode = 'createdDateDecreasing',
     this.taskGroupMode = 'Default',
@@ -111,6 +115,7 @@ class AppSettings {
     String? defaultDueDate,
     String? timeZoneLabel,
     int? accentColor,
+    int? keepLatestPastTasks,
     bool? darkMode,
     String? taskSortMode,
     String? taskGroupMode,
@@ -149,6 +154,7 @@ class AppSettings {
       defaultDueDate: defaultDueDate ?? this.defaultDueDate,
       timeZoneLabel: timeZoneLabel ?? this.timeZoneLabel,
       accentColor: accentColor ?? this.accentColor,
+      keepLatestPastTasks: keepLatestPastTasks ?? this.keepLatestPastTasks,
       darkMode: darkMode ?? this.darkMode,
       taskSortMode: taskSortMode ?? this.taskSortMode,
       taskGroupMode: taskGroupMode ?? this.taskGroupMode,
@@ -188,6 +194,7 @@ class AppSettings {
     'defaultDueDate': defaultDueDate,
     'timeZoneLabel': timeZoneLabel,
     'accentColor': accentColor,
+    'keepLatestPastTasks': keepLatestPastTasks,
     'darkMode': darkMode,
     'taskSortMode': taskSortMode,
     'taskGroupMode': taskGroupMode,
@@ -224,6 +231,7 @@ class AppSettings {
     defaultDueDate: map['defaultDueDate'] as String? ?? 'Today',
     timeZoneLabel: map['timeZoneLabel'] as String? ?? 'UTC+0',
     accentColor: map['accentColor'] as int? ?? 0xFFFFB31A,
+    keepLatestPastTasks: map['keepLatestPastTasks'] as int? ?? 0,
     darkMode: map['darkMode'] as bool? ?? false,
     taskSortMode: map['taskSortMode'] as String? ?? 'createdDateDecreasing',
     taskGroupMode: map['taskGroupMode'] as String? ?? 'Default',

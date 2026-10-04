@@ -93,7 +93,9 @@ class _GoogleCalendarTileState extends State<GoogleCalendarTile> {
   Future<void> _disableSync() async {
     widget.db.syncToCalendars["google"] = "none";
     widget.db.viewOnlyCalendars["google"] = {};
-    widget.db.updateDataBase();
+    // Only the sync settings changed; the next launch clears the cached events.
+    widget.db.saveSyncToCalendars();
+    widget.db.saveViewOnlyCalendars();
     setState(() {});
   }
 

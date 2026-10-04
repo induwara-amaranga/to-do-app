@@ -45,7 +45,9 @@ void main() {
 
         // 2. The user signs in somewhere else in the app.
         final seen = <Uri>[];
-        GoogleAuthService.calendarApi = gcal.CalendarApi(fakeGoogleClient(seen));
+        GoogleAuthService.calendarApi = gcal.CalendarApi(
+          fakeGoogleClient(seen),
+        );
 
         // 3. The calendar service uses that session without a new sign-in.
         final events = await GoogleCalendarService.getEvents('primary');
@@ -61,7 +63,9 @@ void main() {
       await GoogleCalendarService.getEvents('a');
 
       // Token refresh builds a new client; the service must use the new one.
-      GoogleAuthService.calendarApi = gcal.CalendarApi(fakeGoogleClient(second));
+      GoogleAuthService.calendarApi = gcal.CalendarApi(
+        fakeGoogleClient(second),
+      );
       await GoogleCalendarService.getEvents('b');
 
       expect(first.length, 1);
