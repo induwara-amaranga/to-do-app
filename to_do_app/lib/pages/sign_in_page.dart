@@ -125,19 +125,11 @@ class _MyWidgetState extends State<SignInPage> {
               child: GestureDetector(
                 onTap: () async {
                   try {
+                    final auth = context.read<AuthProvider>();
                     GoogleSignInAccount? user =
-                        GoogleAuthService.currentUser ??
-                        await GoogleAuthService.signInSilently() ??
-                        await GoogleAuthService.signIn();
+                        await GoogleAuthService.ensureSignedIn(auth: auth);
                     if (user != null) {
-                      // Navigate to the next page or update the UI accordingly
                       if (!context.mounted) return;
-                      context.read<AuthProvider>().setGoogleSignedIn(
-                        true,
-                        displayName: user.displayName ?? user.email,
-                        email: user.email,
-                        photoUrl: user.photoUrl ?? '',
-                      );
 
                       setState(() {
                         isSignedIn = true;

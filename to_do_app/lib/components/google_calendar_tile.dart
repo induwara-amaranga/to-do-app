@@ -29,32 +29,19 @@ class _GoogleCalendarTileState extends State<GoogleCalendarTile> {
     try {
       final authProvider = context.read<AuthProvider>();
 
-      // Ensure signed in — silent restore first, interactive if needed
-      if (!authProvider.isGoogleSignedIn ||
-          GoogleAuthService.currentUser == null) {
-        var user = await GoogleAuthService.signInSilently();
-        user ??= await GoogleAuthService.signIn();
-
-        if (!mounted) return;
-        if (user == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Google sign-in was cancelled."),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-          return;
-        }
-        authProvider.setGoogleSignedIn(
-          true,
-          displayName: user.displayName ?? user.email,
-          email: user.email,
-          photoUrl: user.photoUrl ?? '',
+      // Reuses a sign-in done anywhere else; only prompts if there is none.
+      final user = await GoogleAuthService.ensureSignedIn(auth: authProvider);
+      if (!mounted) return;
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Google sign-in was cancelled."),
+            backgroundColor: Colors.redAccent,
+          ),
         );
+        return;
       }
 
-      // Refresh the API client with a current token
-      await GoogleAuthService.ensureApisReady();
       final calendarAPI = GoogleAuthService.calendarApi;
 
       gcal.CalendarList calendars = gcal.CalendarList();

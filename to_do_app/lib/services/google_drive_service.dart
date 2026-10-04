@@ -19,7 +19,8 @@ class GoogleDriveService {
   //   ],
   // );
 
-  static final drive.DriveApi? _driveApi = GoogleAuthService.driveApi;
+  // Getter so a sign-in done anywhere else in the app is picked up.
+  static drive.DriveApi? get _driveApi => GoogleAuthService.driveApi;
   GoogleSignInAccount? _account;
   static GoogleSignInAccount? account;
 

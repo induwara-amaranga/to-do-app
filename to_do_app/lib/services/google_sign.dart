@@ -2,6 +2,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as gcal;
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
+import 'package:to_do_app/providers/auth_provider.dart';
 
 class GoogleAuthService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -68,6 +69,34 @@ class GoogleAuthService {
     } catch (e) {
       return null;
     }
+  }
+
+  /// The one entry point every screen should use when it needs Google.
+  ///
+  /// Reuses the session if the user already signed in anywhere in the app,
+  /// then tries a silent restore, and only shows the account picker as a last
+  /// resort (and only when [interactive] is true). API clients are refreshed,
+  /// and [auth] (if given) is updated so every screen sees the signed-in state.
+  static Future<GoogleSignInAccount?> ensureSignedIn({
+    AuthProvider? auth,
+    bool interactive = true,
+  }) async {
+    var user = currentUser ?? _googleSignIn.currentUser;
+    user ??= await signInSilently();
+    if (user == null && interactive) user = await signIn();
+    if (user == null) return null;
+
+    currentUser = user;
+    await ensureApisReady();
+    if (auth != null && !(auth.isGoogleSignedIn && auth.email == user.email)) {
+      auth.setGoogleSignedIn(
+        true,
+        displayName: user.displayName ?? user.email,
+        email: user.email,
+        photoUrl: user.photoUrl ?? '',
+      );
+    }
+    return user;
   }
 
   /// Call this before any API call to ensure apis are fresh

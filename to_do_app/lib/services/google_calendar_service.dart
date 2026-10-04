@@ -17,7 +17,10 @@ final _uuid = Uuid();
 
 class GoogleCalendarService {
   //static const _scopes = [gcal.CalendarApi.calendarScope];
-  static final gcal.CalendarApi? _calendarApi = GoogleAuthService.calendarApi;
+  // A getter, not a `static final`: a final would capture whatever the auth
+  // service held the first time this class was touched (null if that was
+  // before sign-in), so signing in elsewhere would never reach it.
+  static gcal.CalendarApi? get _calendarApi => GoogleAuthService.calendarApi;
   //static AuthClient? _client;
   static Map<String, String>? headers;
   static GoogleSignInAccount? _account;
