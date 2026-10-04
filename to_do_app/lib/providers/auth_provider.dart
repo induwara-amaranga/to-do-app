@@ -5,22 +5,38 @@ class AuthProvider extends ChangeNotifier {
   bool _isGoogleSignedIn;
   bool _isOutlookSignedIn;
   String _displayName;
+  String _email;
+  String _photoUrl;
 
   AuthProvider({
     bool isGoogleSignedIn = false,
     bool isOutlookSignedIn = false,
     String displayName = '',
+    String email = '',
+    String photoUrl = '',
   }) : _isGoogleSignedIn = isGoogleSignedIn,
        _isOutlookSignedIn = isOutlookSignedIn,
-       _displayName = displayName;
+       _displayName = displayName,
+       _email = email,
+       _photoUrl = photoUrl;
 
   bool get isGoogleSignedIn => _isGoogleSignedIn;
   bool get isOutlookSignedIn => _isOutlookSignedIn;
   String get displayName => _displayName;
+  String get email => _email;
+  String get photoUrl => _photoUrl;
 
-  void setGoogleSignedIn(bool value, {String displayName = ''}) {
-    _isGoogleSignedIn = value;
-    if (value) _displayName = displayName;
+  void setGoogleSignedIn(
+    bool value, {
+    String displayName = '',
+    String email = '',
+    String photoUrl = '',
+  }) {
+    if (!value) return signOutGoogle();
+    _isGoogleSignedIn = true;
+    _displayName = displayName;
+    _email = email;
+    _photoUrl = photoUrl;
     notifyListeners();
   }
 
@@ -32,6 +48,8 @@ class AuthProvider extends ChangeNotifier {
   void signOutGoogle() {
     _isGoogleSignedIn = false;
     _displayName = '';
+    _email = '';
+    _photoUrl = '';
     notifyListeners();
   }
 

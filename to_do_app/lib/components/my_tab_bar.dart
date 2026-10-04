@@ -31,7 +31,12 @@ class MyTabBar extends StatelessWidget implements PreferredSizeWidget {
         labelColor: Theme.of(context).colorScheme.onSurface,
         unselectedLabelColor: Theme.of(
           context,
-        ).colorScheme.onSurface.withAlpha(100),
+        ).colorScheme.onSurface.withValues(alpha: 0.4),
+        labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        unselectedLabelStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+        ),
         indicatorColor: Theme.of(context).colorScheme.primary,
         indicatorWeight: 0.1,
         tabs: _taskCategoryTabs(),

@@ -6,7 +6,6 @@ import 'package:to_do_app/models/calendar_event.dart';
 import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 import 'package:uuid/uuid.dart';
-import 'package:to_do_app/utils/log.dart';
 
 final DeviceCalendarPlugin _deviceCalendarPlugin = DeviceCalendarPlugin(
   shouldInitTimezone: false,
@@ -34,15 +33,10 @@ class LocalCalendarService {
 
       if (permissionsGranted.isSuccess && permissionsGranted.data == true) {
         final calendarsResult = await _deviceCalendarPlugin.retrieveCalendars();
-        logd('**Calendar permissions granted**');
 
         return calendarsResult.data ?? [];
-      } else {
-        logd('**Calendar permissions not granted**');
-      }
-    } catch (e) {
-      logd('Error retrieving calendars: $e');
-    }
+      } else {}
+    } catch (_) {}
     return [];
   }
 
@@ -59,9 +53,6 @@ class LocalCalendarService {
     );
 
     final events = eventsResult.data ?? [];
-    for (final event in events) {
-      // logd('Event: ${event.title} (${event.start})');
-    }
     return events;
   }
 
@@ -73,12 +64,8 @@ class LocalCalendarService {
       RecurrenceRule? recurrenceRule = _buildRecurrenceRule(task.repeatType);
 
       if (dueDate == null) {
-        logd('⚠️ Skipped: missing due date for ${task.name}');
         return;
       }
-      logd(
-        "${task.dueDate}  ,${task.dueTime}  ${DateTimeUtilsHelper.combineDateAndTime(DateTimeUtilsHelper.parseDate(task.dueDate)!, DateTimeUtilsHelper.parseTime(task.dueTime!)!)}",
-      );
 
       // Build start/end as TZDateTime
       final now = tz.TZDateTime.from(
@@ -101,7 +88,6 @@ class LocalCalendarService {
       final end = start.add(const Duration(minutes: 30));
 
       if (!end.isAfter(start)) {
-        logd('⚠️ Adjusted end time for "${task.name}"');
         end.add(const Duration(minutes: 30));
       }
 
@@ -114,78 +100,55 @@ class LocalCalendarService {
         eventId: task.remoteEventIds[0],
         recurrenceRule: recurrenceRule,
       );
-      logd('event${event.start} ${event.end}');
 
       // 1️⃣ Retrieve events in a small window around this time
       final events = await LocalCalendarService.getEvents(calendarId);
       //final events = eventsResult.data ?? [];
       // for (var event in events) {
-      //   logd("${event.eventId}  ${event.title}");
       // }
 
       // 2️⃣ Check if an event with the same title and start time exists
       // 2️⃣ Check if an event with the same ID exists
       final exists = events.cast<Event?>().firstWhere((e) {
-        logd(
-          "${e?.eventId} and -> ${task.remoteEventIds[0]}  ${e != null && e.eventId == task.remoteEventIds[0]}",
-        );
         return e != null && e.eventId == task.remoteEventIds[0];
       }, orElse: () => null);
 
       if (exists != null) {
         event.eventId = exists.eventId;
-        logd("event ${event.title} already exists");
         //return;
         //return;
       } else {
-        logd("event ${event.title} does not exist, creating new one");
         event.eventId = null; // Ensure new event is created
       }
-      logd("id ${event.eventId}");
 
       final result = await _deviceCalendarPlugin.createOrUpdateEvent(event);
 
       if (result!.isSuccess && result.data != null) {
-        logd(
-          'local============>✅ Event ${task.name} created or edited:  ${result.data}',
-        );
         task.remoteEventIds[0] = result.data;
       } else {
-        logd(
-          '❌ Failed to create event.task=$task Success=${result.isSuccess}, '
-          'Data=${result.data}, Errors=${result.errors.toString()}',
-        );
         throw Exception(
           '❌ Failed to create event.task=$task Success=${result.isSuccess}, '
           'Data=${result.data}, Errors=${result.errors.toString()}',
         );
       }
-    } catch (e, st) {
-      //logd('❌ Exception while creating event: $e task=$task ');
-      logd(st);
+    } catch (e) {
       throw Exception('❌ Exception while creating event: $e task=$task ');
     }
   }
 
   static Future<void> deleteEvent(String? eventId, String? calendarId) async {
-    // logd("deletde$eventId")
     final result = await _deviceCalendarPlugin.deleteEvent(calendarId, eventId);
 
     // 3️⃣ Handle result
     if (result.isSuccess && result.data == true) {
-      logd('✅ Event deleted successfully. id ${eventId}');
-    } else {
-      logd('Failed to delete event.');
-    }
+    } else {}
   }
 
   // static Future<void> importCalendarEventsToDB(
   //   List<dynamic>? events,
   //   ToDoDataBase db,
   // ) async {
-  //   logd("-----------------importing----------------------");
   //   if (events == null || events.isEmpty) {
-  //     logd('No events to import.');
   //     return;
   //   }
 
@@ -200,10 +163,8 @@ class LocalCalendarService {
   //           task[14] == event.calendarId &&
   //           task[15] == event.eventId,
   //     );
-  //     logd("${event.title}   ${event.eventId}-cal ${event.calendarId}");
 
   //     if (exists) {
-  //       logd('⚠️ Skipped duplicate: ${event.title}');
   //       continue;
   //     }
 
@@ -254,21 +215,15 @@ class LocalCalendarService {
 
   //   db.updateDataBase();
   //   db.loadData();
-  //   logd('✅ Imported $importedCount new events into task list.');
   // }
 
   static Future<void> importCalendarEventsToDB(
     List<dynamic>? events,
     ToDoDataBase db,
   ) async {
-    logd("-----------------importing----------------------");
     if (events == null || events.isEmpty) {
-      logd('No events to import.');
       return;
     }
-
-    int importedCount = 0;
-    int updatedCount = 0;
 
     for (final event in events) {
       if (event.start == null) continue;
@@ -316,8 +271,6 @@ class LocalCalendarService {
         t.reminderType = taskDetails['remainderType'] as String;
         t.isStarred = taskDetails['isStarred'] as bool;
         t.subtasks = [];
-        updatedCount++;
-        logd('✏️ Updated existing task: ${event.title}');
         continue;
       }
 
@@ -346,24 +299,16 @@ class LocalCalendarService {
           notificationIds: [],
         ),
       );
-
-      importedCount++;
-      logd('➕ Added new task: ${event.title}');
     }
 
     await db.updateDataBase();
-    logd(
-      '✅ Imported $importedCount new events, updated $updatedCount existing ones.',
-    );
   }
 
   // static Future<void> importToDoCalendarEventsToDB(
   //   List<dynamic>? events,
   //   ToDoDataBase db,
   // ) async {
-  //   logd("-----------------importing----------------------");
   //   if (events == null || events.isEmpty) {
-  //     logd('No events to import.');
   //     return;
   //   }
 
@@ -375,10 +320,8 @@ class LocalCalendarService {
 
   //     // Parse start time into date/time strings
   //     final _start = event.start!;
-  //     logd("start cal$_start");
   //     DateTime start = DateTimeUtilsHelper.toUtcUsingLocal(_start);
   //     start = DateTimeUtilsHelper.toUtcUsingLocal(start);
-  //     logd("Start utc $start");
   //     final parts = start.toIso8601String().split('T');
   //     final dueDate = parts.first;
   //     final dueTime = parts.length > 1 ? parts[1] : '00:00:00';
@@ -428,7 +371,6 @@ class LocalCalendarService {
   //       db.localCalTasks[existingIndex][10] = taskDetails['isStarred'];
   //       db.localCalTasks[existingIndex][13] = taskDetails['subTasks'];
   //       updatedCount++;
-  //       logd('✏️ Updated existing task: ${event.title}');
   //       continue;
   //     }
 
@@ -455,14 +397,10 @@ class LocalCalendarService {
   //     ]);
 
   //     importedCount++;
-  //     logd('➕ Added new task: ${event.title}');
   //   }
 
   //   db.updateDataBase();
   //   db.loadData();
-  //   logd(
-  //     '✅ Imported $importedCount new events, updated $updatedCount existing ones.',
-  //   );
   // }
 
   static Future<Calendar> createNewCalendar(List<Calendar> calendars) async {
@@ -505,24 +443,17 @@ class LocalCalendarService {
     ToDoDataBase db,
     String calendarID,
   ) async {
-    logd("Sync to ------------------------------------------------");
-    int count = 0;
     //final calendar = await ensureToDoListCalendar();
     final tasksToSync = List<Task>.from(db.toDoList);
     for (var task in tasksToSync) {
       if (task.source == "repeat") continue;
       try {
         await addEvent(calendarID, task);
-        count++;
-      } catch (e) {
-        logd('❌ Failed to sync(add) ${calendarID} "${task.name}"  $e.');
-      }
+      } catch (_) {}
     }
-    logd("📅 $count tasks added/updated to local calendar");
   }
 
   static Future<void> syncTasksFromCalendar(ToDoDataBase db) async {
-    logd("sync from------------------------------");
     final calID = db.syncToCalendars["local"];
     //db.localCalTasks.removeWhere((t) => t[14] == calID);
     List<dynamic> events = await getEvents(calID);
@@ -534,14 +465,9 @@ class LocalCalendarService {
     ToDoDataBase db,
   ) async {
     db.loadData();
-    logd("-----------------importing-view only---------------------");
     if (events == null || events.isEmpty) {
-      logd('No events to import.');
       return;
     }
-
-    int importedCount = 0;
-    int updatedCount = 0;
 
     // Recurring events expand into many instances with the same eventId.
     // Keep only the earliest instance per eventId so we import the start date.
@@ -604,8 +530,6 @@ class LocalCalendarService {
         t.reminderType = taskDetails['remainderType'] as String;
         t.isStarred = taskDetails['isStarred'] as bool;
         t.subtasks = [];
-        updatedCount++;
-        logd('✏️ Updated existing task: ${event.title}');
         continue;
       }
 
@@ -633,16 +557,9 @@ class LocalCalendarService {
           completedAt: "none",
         ),
       );
-
-      importedCount++;
-      logd('➕ Added new task: ${event.title}');
     }
 
-    logd(" localCalTasks after import ${db.localCalTasks}");
     await db.updateDataBase();
-    logd(
-      '✅ Imported $importedCount new events, updated $updatedCount existing ones.',
-    );
   }
 
   static String _repeatTypeFromRule(RecurrenceRule? rule) {

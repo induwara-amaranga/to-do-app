@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:to_do_app/themes/app_colors.dart';
 
 ThemeData darkMode = ThemeData(
   colorScheme: ColorScheme.dark(
@@ -13,4 +14,5 @@ ThemeData darkMode = ThemeData(
     surface: const Color.fromARGB(255, 20, 20, 20),
     //onSurface: Colors.white,
   ),
+  extensions: const [AppColors.dark],
 );

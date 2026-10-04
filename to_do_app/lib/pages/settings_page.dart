@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:to_do_app/components/ringtone_picker.dart';
-import 'package:to_do_app/components/task_page_bottom_nav_bar.dart';
 import 'package:to_do_app/data/database.dart';
+import 'package:to_do_app/themes/app_colors.dart';
 import 'package:to_do_app/providers/auth_provider.dart';
 import 'package:to_do_app/themes/theme_provider.dart';
 import 'package:to_do_app/models/settings.dart';
 import 'package:to_do_app/services/notification_service.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
+import 'package:to_do_app/components/app_toggle.dart';
 //import 'package:flutter/services.dart';
 
 // ════════════════════════════════════════════════════════════════
@@ -17,72 +18,6 @@ import 'package:to_do_app/utils/date_time_utils.dart';
 //  Date & Time, Account, About) with colored icon tiles, grouped
 //  cards, value badges, toggles and bottom-sheet option pickers.
 // ════════════════════════════════════════════════════════════════
-
-/// Colored icon swatch (matches the HTML `.row-icon` palette, with
-/// dark-mode variants). Independent of the app's amber color scheme.
-class _Swatch {
-  final Color lightBg, lightFg, darkBg, darkFg;
-  const _Swatch(this.lightBg, this.lightFg, this.darkBg, this.darkFg);
-  Color bg(bool d) => d ? darkBg : lightBg;
-  Color fg(bool d) => d ? darkFg : lightFg;
-}
-
-const Map<String, _Swatch> _swatches = {
-  'purple': _Swatch(
-    Color(0xFFEEF2FF),
-    Color(0xFF4F46E5),
-    Color(0xFF1E1B4B),
-    Color(0xFFA5B4FC),
-  ),
-  'teal': _Swatch(
-    Color(0xFFE6FBF5),
-    Color(0xFF0F766E),
-    Color(0xFF042F2E),
-    Color(0xFF5EEAD4),
-  ),
-  'orange': _Swatch(
-    Color(0xFFFFF4E6),
-    Color(0xFFC2410C),
-    Color(0xFF431407),
-    Color(0xFFFB923C),
-  ),
-  'pink': _Swatch(
-    Color(0xFFFDF2F8),
-    Color(0xFFBE185D),
-    Color(0xFF500724),
-    Color(0xFFF9A8D4),
-  ),
-  'blue': _Swatch(
-    Color(0xFFEFF6FF),
-    Color(0xFF1D4ED8),
-    Color(0xFF1E3A5F),
-    Color(0xFF93C5FD),
-  ),
-  'green': _Swatch(
-    Color(0xFFF0FDF4),
-    Color(0xFF16A34A),
-    Color(0xFF052E16),
-    Color(0xFF86EFAC),
-  ),
-  'red': _Swatch(
-    Color(0xFFFEF2F2),
-    Color(0xFFDC2626),
-    Color(0xFF450A0A),
-    Color(0xFFFCA5A5),
-  ),
-  'amber': _Swatch(
-    Color(0xFFFFFBEB),
-    Color(0xFFB45309),
-    Color(0xFF422006),
-    Color(0xFFFCD34D),
-  ),
-  'indigo': _Swatch(
-    Color(0xFFEEF2FF),
-    Color(0xFF6366F1),
-    Color(0xFF1E1B4B),
-    Color(0xFFC7D2FE),
-  ),
-};
 
 // ─────────────────────────────────────────────────────────────────
 //  Shared building blocks
@@ -94,15 +29,14 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      padding: const EdgeInsets.fromLTRB(6, 0, 6, 12),
       child: Text(
         label.toUpperCase(),
         style: TextStyle(
           fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: cs.onSurface.withAlpha(140),
+          fontWeight: FontWeight.w700,
+          color: context.appColors.muted,
           letterSpacing: 1.0,
         ),
       ),
@@ -123,18 +57,11 @@ class _Card extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
         color: cs.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: cs.onSurface.withAlpha(20)),
-        boxShadow: [
-          BoxShadow(
-            color: cs.onSurface.withAlpha(12),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.appColors.outline),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         child: Column(
           children: List.generate(children.length, (i) {
             return Column(
@@ -142,10 +69,9 @@ class _Card extends StatelessWidget {
                 children[i],
                 if (i < children.length - 1)
                   Divider(
-                    height: 0.5,
-                    thickness: 0.5,
-                    indent: 62,
-                    color: cs.onSurface.withAlpha(20),
+                    height: 1,
+                    thickness: 1,
+                    color: context.appColors.outline,
                   ),
               ],
             );
@@ -158,31 +84,20 @@ class _Card extends StatelessWidget {
 
 class _ColorIcon extends StatelessWidget {
   final IconData icon;
-  final String color; // key into _swatches, or 'gray'
+  // Kept so existing call sites compile; every row now shares the accent tile.
+  final String color;
   const _ColorIcon(this.icon, this.color);
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final Color bg;
-    final Color fg;
-    if (color == 'gray') {
-      bg = cs.onSurface.withAlpha(20);
-      fg = cs.onSurface.withAlpha(150);
-    } else {
-      final s = _swatches[color]!;
-      bg = s.bg(dark);
-      fg = s.fg(dark);
-    }
     return Container(
-      width: 32,
-      height: 32,
+      width: 40,
+      height: 40,
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(8),
+        color: context.appColors.accentSoft,
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Icon(icon, color: fg, size: 18),
+      child: Icon(icon, color: kAccent, size: 24),
     );
   }
 }
@@ -241,7 +156,7 @@ class _Row extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
             _ColorIcon(icon, color),
@@ -253,7 +168,8 @@ class _Row extends StatelessWidget {
                   Text(
                     title,
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
                       color: titleColor ?? cs.onSurface,
                     ),
                   ),
@@ -263,8 +179,8 @@ class _Row extends StatelessWidget {
                       child: Text(
                         subtitle!,
                         style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurface.withAlpha(140),
+                          fontSize: 13,
+                          color: context.appColors.muted,
                         ),
                       ),
                     ),
@@ -276,8 +192,8 @@ class _Row extends StatelessWidget {
               if (trailing != null) const SizedBox(width: 6),
               Icon(
                 Icons.chevron_right,
-                size: 18,
-                color: cs.onSurface.withAlpha(110),
+                size: 22,
+                color: context.appColors.muted,
               ),
             ],
           ],
@@ -295,16 +211,7 @@ class _Toggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Switch.adaptive(
-      value: value,
-      onChanged: onChanged,
-      activeColor: Colors.white,
-      activeTrackColor: const Color(0xFF4F46E5),
-      inactiveThumbColor: Colors.white,
-      inactiveTrackColor: cs.onSurface.withAlpha(60),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    );
+    return AppToggle(value: value, onChanged: onChanged);
   }
 }
 
@@ -361,6 +268,7 @@ class _OptionSheetState extends State<_OptionSheet> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final colors = context.appColors;
     final query = _controller.text.toLowerCase();
     final visible =
         widget.searchable && query.isNotEmpty
@@ -381,55 +289,60 @@ class _OptionSheetState extends State<_OptionSheet> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 36,
+            width: 40,
             height: 4,
-            margin: const EdgeInsets.fromLTRB(0, 12, 0, 16),
+            margin: const EdgeInsets.fromLTRB(0, 12, 0, 12),
             decoration: BoxDecoration(
-              color: cs.onSurface.withAlpha(40),
+              color: colors.trackOff,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 widget.title,
                 style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Manrope',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
                   color: cs.onSurface,
                 ),
               ),
             ),
           ),
-          Divider(height: 0.5, color: cs.onSurface.withAlpha(20)),
+          Divider(height: 1, thickness: 1, color: colors.outline),
           if (widget.searchable)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
-                  color: cs.onSurface.withAlpha(15),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colors.outline),
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.search,
-                      size: 18,
-                      color: cs.onSurface.withAlpha(140),
-                    ),
+                    Icon(Icons.search, size: 22, color: colors.muted),
                     const SizedBox(width: 10),
                     Expanded(
                       child: TextField(
                         controller: _controller,
                         autofocus: true,
                         onChanged: (_) => setState(() {}),
-                        decoration: const InputDecoration(
-                          hintText: 'Search…',
+                        style: const TextStyle(fontSize: 15),
+                        decoration: InputDecoration(
+                          hintText: 'Search',
+                          hintStyle: TextStyle(
+                            fontSize: 15,
+                            color: colors.muted,
+                          ),
                           border: InputBorder.none,
                           isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 11,
+                          ),
                         ),
                       ),
                     ),
@@ -440,31 +353,34 @@ class _OptionSheetState extends State<_OptionSheet> {
           Flexible(
             child: ListView.builder(
               shrinkWrap: true,
-              padding: const EdgeInsets.only(bottom: 24),
+              padding: const EdgeInsets.only(top: 4, bottom: 16),
               itemCount: visible.length,
               itemBuilder: (ctx, i) {
                 final o = visible[i];
+                final selected = o == widget.current;
                 return InkWell(
                   onTap: () => Navigator.pop(ctx, o),
-                  child: Padding(
+                  child: Container(
+                    color: selected ? colors.accentSoft : null,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
-                      vertical: 14,
+                      vertical: 15,
                     ),
                     child: Row(
                       children: [
                         Expanded(
                           child: Text(
                             o,
-                            style: TextStyle(fontSize: 15, color: cs.onSurface),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight:
+                                  selected ? FontWeight.w500 : FontWeight.w400,
+                              color: cs.onSurface,
+                            ),
                           ),
                         ),
-                        if (o == widget.current)
-                          const Icon(
-                            Icons.check,
-                            size: 18,
-                            color: Color(0xFF4F46E5),
-                          ),
+                        if (selected)
+                          const Icon(Icons.check, size: 22, color: kAccent),
                       ],
                     ),
                   ),
@@ -488,31 +404,25 @@ class _SubScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor:
-          cs.surface == Colors.white
-              ? const Color(0xFFF5F5F7)
-              : const Color(0xFF0F0F12),
+      backgroundColor: cs.surface,
       appBar: AppBar(
         backgroundColor: cs.surface,
-        elevation: 0.5,
-        shadowColor: cs.onSurface.withAlpha(30),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(
-            Icons.chevron_left,
-            size: 28,
-            color: Color(0xFF4F46E5),
-          ),
+          icon: Icon(Icons.arrow_back, color: cs.onSurface),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           title,
-          style: TextStyle(
-            color: cs.onSurface,
-            fontWeight: FontWeight.w600,
-            fontSize: 17,
+          style: const TextStyle(
+            color: kAccent,
+            fontFamily: 'Manrope',
+            fontWeight: FontWeight.w800,
+            fontSize: 20,
           ),
         ),
-        centerTitle: true,
+        centerTitle: false,
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
@@ -551,35 +461,37 @@ class _SettingsPageState extends State<SettingsPage> {
     final isDark = themeProvider.isDarkMode;
 
     final name = auth.displayName.isNotEmpty ? auth.displayName : 'Guest User';
-    final email = auth.isGoogleSignedIn ? 'Google Account' : 'Local account';
+    final email =
+        auth.isGoogleSignedIn
+            ? (auth.email.isNotEmpty ? auth.email : 'Google Account')
+            : 'Local account';
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF0F0F12) : const Color(0xFFF5F5F7),
+      backgroundColor: cs.surface,
       appBar: AppBar(
         backgroundColor: cs.surface,
-        elevation: 0.5,
-        shadowColor: cs.onSurface.withAlpha(30),
-        title: Text(
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
           'Settings',
           style: TextStyle(
-            color: cs.onSurface,
-            fontWeight: FontWeight.w600,
-            fontSize: 17,
+            color: kAccent,
+            fontFamily: 'Manrope',
+            fontWeight: FontWeight.w800,
+            fontSize: 20,
           ),
         ),
-        centerTitle: true,
+        centerTitle: false,
         actions: [
           IconButton(
             icon: Icon(
               isDark ? Icons.light_mode : Icons.nightlight_round,
-              color: const Color(0xFF4F46E5),
+              color: kAccent,
             ),
             onPressed: () => themeProvider.toggleTheme(),
           ),
         ],
       ),
-      bottomNavigationBar: const TaskBottomNavBar(current: 1),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         children: [
@@ -775,10 +687,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4F46E5),
-                foregroundColor: Colors.white,
-                elevation: 4,
-                shadowColor: const Color(0xFF4F46E5).withAlpha(80),
+                backgroundColor: kAccent,
+                foregroundColor: kOnAccent,
+                elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
@@ -820,24 +731,13 @@ class _ProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Material(
-      color: cs.surface,
-      borderRadius: BorderRadius.circular(14),
+      color: cs.secondary,
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: cs.onSurface.withAlpha(20)),
-            boxShadow: [
-              BoxShadow(
-                color: cs.onSurface.withAlpha(12),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
           child: Row(
             children: [
               Container(
@@ -845,23 +745,20 @@ class _ProfileCard extends StatelessWidget {
                 height: 56,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF4F46E5), Color(0xFF818CF8)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  color: kAccent,
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'G',
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w600,
+                    color: kOnAccent,
+                    fontFamily: 'Manrope',
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -870,7 +767,7 @@ class _ProfileCard extends StatelessWidget {
                       name,
                       style: TextStyle(
                         fontSize: 17,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         color: cs.onSurface,
                       ),
                     ),
@@ -879,7 +776,7 @@ class _ProfileCard extends StatelessWidget {
                       email,
                       style: TextStyle(
                         fontSize: 13,
-                        color: cs.onSurface.withAlpha(150),
+                        color: context.appColors.muted,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -889,25 +786,20 @@ class _ProfileCard extends StatelessWidget {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF4F46E5).withAlpha(30),
+                        color: context.appColors.accentSoft,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         signedIn ? 'Signed In' : 'Local',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
-                          color: Color(0xFF6366F1),
+                          color: cs.onSurface,
                         ),
                       ),
                     ),
                   ],
                 ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                size: 18,
-                color: cs.onSurface.withAlpha(110),
               ),
             ],
           ),
@@ -936,6 +828,21 @@ class _NotificationsPageState extends State<NotificationsPage> {
     setState(() => widget.db.settings = updated);
     widget.db.saveSettings();
     NotificationService.scheduleDailySummaryNotifications(widget.db);
+  }
+
+  // Daily summaries are the first notification feature a user may turn on,
+  // so permission is requested here instead of at app start.
+  Future<void> _setDailySummary(bool enabled, AppSettings updated) async {
+    if (enabled &&
+        !await NotificationService.ensureNotificationPermission(
+          context,
+          rationale:
+              'To send your daily summaries, the app needs permission to send notifications.',
+        )) {
+      return;
+    }
+    if (!mounted) return;
+    _set(updated);
   }
 
   @override
@@ -1055,9 +962,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   setState(
                     () => _set(_s.copyWith(notifName: notifMap['name'])),
                   );
-                } else {
-                  print('No ringtone selected');
-                }
+                } else {}
               },
             ),
             _Row(
@@ -1113,7 +1018,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
               subtitle: 'Daily summary notification',
               trailing: _Toggle(
                 _s.taskOverview,
-                (v) => _set(_s.copyWith(taskOverview: v)),
+                (v) => _setDailySummary(v, _s.copyWith(taskOverview: v)),
               ),
             ),
             _Row(
@@ -1123,7 +1028,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
               subtitle: 'Daily morning briefing',
               trailing: _Toggle(
                 _s.morningPlan,
-                (v) => _set(_s.copyWith(morningPlan: v)),
+                (v) => _setDailySummary(v, _s.copyWith(morningPlan: v)),
               ),
             ),
             _Row(
@@ -1133,7 +1038,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
               subtitle: 'End-of-day recap',
               trailing: _Toggle(
                 _s.eveningReview,
-                (v) => _set(_s.copyWith(eveningReview: v)),
+                (v) => _setDailySummary(v, _s.copyWith(eveningReview: v)),
               ),
             ),
           ],
@@ -1169,9 +1074,7 @@ class ThemePage extends StatelessWidget {
         title: label,
         onTap: onTap,
         trailing:
-            selected
-                ? const Icon(Icons.check, size: 18, color: Color(0xFF4F46E5))
-                : null,
+            selected ? const Icon(Icons.check, size: 18, color: kAccent) : null,
       );
     }
 
@@ -1199,7 +1102,7 @@ class ThemePage extends StatelessWidget {
               spacing: 12,
               runSpacing: 12,
               children: const [
-                _AccentDot(Color(0xFF4F46E5)),
+                _AccentDot(kAccent),
                 _AccentDot(Color(0xFF0F766E)),
                 _AccentDot(Color(0xFFDC2626)),
                 _AccentDot(Color(0xFFB45309)),
@@ -1231,7 +1134,7 @@ class _AccentDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selected = color == const Color(0xFF4F46E5);
+    final selected = color == kAccent;
     final cs = Theme.of(context).colorScheme;
     return Container(
       width: 34,
@@ -1521,7 +1424,10 @@ class AccountPage extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final auth = context.watch<AuthProvider>();
     final name = auth.displayName.isNotEmpty ? auth.displayName : 'Guest User';
-    final email = auth.isGoogleSignedIn ? 'Google Account' : 'Local account';
+    final email =
+        auth.isGoogleSignedIn
+            ? (auth.email.isNotEmpty ? auth.email : 'Google Account')
+            : 'Local account';
 
     return _SubScaffold(
       title: 'Account',
@@ -1535,17 +1441,13 @@ class AccountPage extends StatelessWidget {
                 height: 72,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF4F46E5), Color(0xFF818CF8)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  color: kAccent,
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'G',
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: kOnAccent,
                     fontSize: 28,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1707,15 +1609,11 @@ class AboutPage extends StatelessWidget {
                 height: 72,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF4F46E5), Color(0xFF818CF8)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  color: kAccent,
                 ),
                 child: const Icon(
                   Icons.check_box_outlined,
-                  color: Colors.white,
+                  color: kOnAccent,
                   size: 32,
                 ),
               ),

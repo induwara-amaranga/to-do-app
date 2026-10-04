@@ -2,7 +2,6 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as gcal;
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
-import 'package:to_do_app/utils/log.dart';
 
 class GoogleAuthService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -22,9 +21,7 @@ class GoogleAuthService {
   static Future<void> initApp() async {
     try {
       currentUser = await signInSilently();
-    } catch (e) {
-      logd("Failed to restore Google session: $e");
-    }
+    } catch (_) {}
   }
 
   /// Call this at app startup — silently restores session if previously signed in

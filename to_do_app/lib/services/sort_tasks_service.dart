@@ -3,127 +3,74 @@ import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 
 class SortTasksService {
-  static List<Task> sortTasksByMode(
-    List<Task> tasksOfThisTab,
-    SortingMode mode,
-  ) {
+  /// Returns a sorted **copy** of [tasks]; the input list is never reordered.
+  ///
+  /// The "All" tab passes `db.toDoList` straight in. Sorting that in place
+  /// reordered the in-memory list away from the Hive box, and since
+  /// `saveTaskAt(i)` writes `toDoList[i]` to box slot `i`, the next toggle or
+  /// edit overwrote a *different* task's record on disk.
+  ///
+  /// Sort keys are computed once per task up front rather than inside the
+  /// comparator, which otherwise re-derives both keys on each of the
+  /// O(n log n) comparisons.
+  static List<Task> sortTasksByMode(List<Task> tasks, SortingMode mode) {
     switch (mode) {
       case SortingMode.aToz:
-        tasksOfThisTab.sort((a, b) {
-          String titleA = a.name;
-          String titleB = b.name;
-          return titleA.toLowerCase().compareTo(titleB.toLowerCase());
-        });
-        break;
+        return _sortedBy(tasks, (t) => t.name.toLowerCase());
       case SortingMode.zToa:
-        tasksOfThisTab.sort((a, b) {
-          String titleA = a.name;
-          String titleB = b.name;
-          return titleB.toLowerCase().compareTo(titleA.toLowerCase());
-        });
-        break;
+        return _sortedBy(tasks, (t) => t.name.toLowerCase(), descending: true);
       case SortingMode.createdDateIncreasing:
-        tasksOfThisTab.sort((a, b) {
-          DateTime dateA = DateTimeUtilsHelper.parseDateTime(a.createdAt!);
-          DateTime dateB = DateTimeUtilsHelper.parseDateTime(b.createdAt!);
-          return dateA.compareTo(dateB);
-        });
-        break;
+        return _sortedBy(tasks, _createdKey);
       case SortingMode.createdDateDecreasing:
-        tasksOfThisTab.sort((a, b) {
-          DateTime dateA = DateTimeUtilsHelper.parseDateTime(a.createdAt!);
-          DateTime dateB = DateTimeUtilsHelper.parseDateTime(b.createdAt!);
-          return dateB.compareTo(dateA);
-        });
-        break;
+        return _sortedBy(tasks, _createdKey, descending: true);
       case SortingMode.dueDateIncreasing:
-        tasksOfThisTab.sort((a, b) {
-          DateTime dateA =
-              DateTimeUtilsHelper.parseDate(a.dueDate) ??
-              DateTime(1971, 01, 01);
-          DateTime? timeA = DateTimeUtilsHelper.parseTime(a.dueTime!);
-          DateTime dateB =
-              DateTimeUtilsHelper.parseDate(b.dueDate) ??
-              DateTime(1971, 01, 01);
-          DateTime? timeB = DateTimeUtilsHelper.parseTime(b.dueTime!);
-          DateTime dateTimeA = DateTime(
-            dateA.year,
-            dateA.month,
-            dateA.day,
-            timeA!.hour,
-            timeA.minute,
-            timeA.second,
-          );
-          DateTime dateTimeB = DateTime(
-            dateB.year,
-            dateB.month,
-            dateB.day,
-            timeB!.hour,
-            timeB.minute,
-            timeB.second,
-          );
-          return dateTimeA.compareTo(dateTimeB);
-        });
-        break;
+        return _sortedBy(tasks, _dueKey);
       case SortingMode.dueDateDecreasing:
-        tasksOfThisTab.sort((a, b) {
-          DateTime dateA =
-              DateTimeUtilsHelper.parseDate(a.dueDate) ??
-              DateTime(1971, 01, 01);
-          DateTime? timeA = DateTimeUtilsHelper.parseTime(a.dueTime!);
-          DateTime dateB =
-              DateTimeUtilsHelper.parseDate(b.dueDate) ??
-              DateTime(1971, 01, 01);
-          DateTime? timeB = DateTimeUtilsHelper.parseTime(b.dueTime!);
-          DateTime dateTimeA = DateTime(
-            dateA.year,
-            dateA.month,
-            dateA.day,
-            timeA!.hour,
-            timeA.minute,
-            timeA.second,
-          );
-          DateTime dateTimeB = DateTime(
-            dateB.year,
-            dateB.month,
-            dateB.day,
-            timeB!.hour,
-            timeB.minute,
-            timeB.second,
-          );
-          return dateTimeB.compareTo(dateTimeA);
-        });
-        break;
+        return _sortedBy(tasks, _dueKey, descending: true);
       case SortingMode.starredFirst:
-        tasksOfThisTab.sort((a, b) {
-          bool isStarredA = a.isStarred;
-          bool isStarredB = b.isStarred;
-          if (isStarredA == isStarredB) {
-            return 0;
-          } else if (isStarredA && !isStarredB) {
-            return -1; // A comes before B
-          } else {
-            return 1; // B comes before A
-          }
-        });
-        break;
+        return _sortedBy(tasks, (t) => t.isStarred ? 0 : 1);
       case SortingMode.nonStarredFirst:
-        tasksOfThisTab.sort((a, b) {
-          bool isStarredA = a.isStarred;
-          bool isStarredB = b.isStarred;
-          if (isStarredA == isStarredB) {
-            return 0;
-          } else if (!isStarredA && isStarredB) {
-            return -1; // A comes before B
-          } else {
-            return 1; // B comes before A
-          }
-        });
-        break;
+        return _sortedBy(tasks, (t) => t.isStarred ? 1 : 0);
       case SortingMode.manual:
-        // Do nothing, keep the original order
-        break;
+        // Keep the original order
+        return List.of(tasks);
     }
-    return tasksOfThisTab;
+  }
+
+  static DateTime _createdKey(Task t) =>
+      DateTimeUtilsHelper.parseDateTime(t.createdAt!);
+
+  static DateTime _dueKey(Task t) {
+    final date =
+        DateTimeUtilsHelper.parseDate(t.dueDate) ?? DateTime(1971, 01, 01);
+    final time = DateTimeUtilsHelper.parseTime(t.dueTime!)!;
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+      time.second,
+    );
+  }
+
+  /// Stable sort by a precomputed key (List.sort isn't guaranteed stable, so
+  /// ties fall back to original position — matching the old starred-first
+  /// behaviour of leaving equal tasks in list order).
+  static List<Task> _sortedBy<K extends Comparable<dynamic>>(
+    List<Task> tasks,
+    K Function(Task) keyOf, {
+    bool descending = false,
+  }) {
+    final keyed = List.generate(
+      tasks.length,
+      (i) => (task: tasks[i], key: keyOf(tasks[i]), pos: i),
+      growable: false,
+    );
+    keyed.sort((a, b) {
+      final c = descending ? b.key.compareTo(a.key) : a.key.compareTo(b.key);
+      return c != 0 ? c : a.pos.compareTo(b.pos);
+    });
+    return [for (final e in keyed) e.task];
   }
 }

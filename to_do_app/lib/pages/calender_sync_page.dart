@@ -6,6 +6,8 @@ import 'package:to_do_app/components/outlook_calendar_tile.dart';
 import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/providers/calendar_sync_provider.dart';
 
+import 'package:to_do_app/themes/app_colors.dart';
+
 class CalenderSyncPage extends StatefulWidget {
   final ToDoDataBase db;
   const CalenderSyncPage({super.key, required this.db});
@@ -23,6 +25,24 @@ class _CalenderSyncPageState extends State<CalenderSyncPage> {
     db = widget.db;
   }
 
+  // Fades and slides each tile in, a little later than the one above it.
+  Widget _staggeredEntry(int index, Widget child) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 300 + index * 120),
+      curve: Curves.easeOut,
+      child: child,
+      builder:
+          (_, t, child) => Opacity(
+            opacity: t,
+            child: Transform.translate(
+              offset: Offset(0, (1 - t) * 16),
+              child: child,
+            ),
+          ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     context.watch<CalendarSyncProvider>();
@@ -32,29 +52,23 @@ class _CalenderSyncPageState extends State<CalenderSyncPage> {
           'Calendar Sync',
           style: TextStyle(
             fontFamily: 'Manrope',
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w800,
             fontSize: 20,
-            letterSpacing: -0.4,
-            color: Theme.of(context).colorScheme.primary,
+            color: kAccent,
           ),
         ),
         centerTitle: true,
         backgroundColor: Theme.of(context).colorScheme.surface,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 8),
             // Heading
             Row(
               children: [
-                Icon(
-                  Icons.sync,
-                  size: 26,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+                Icon(Icons.sync, size: 26, color: kAccent),
                 const SizedBox(width: 10),
                 const Text(
                   "Select sync method",
@@ -62,23 +76,21 @@ class _CalenderSyncPageState extends State<CalenderSyncPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 16),
             Text(
               "Connect your tasks to a calendar so they appear as events. You can enable multiple providers.",
               style: TextStyle(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.6),
+                color: context.appColors.muted,
                 fontSize: 14,
                 height: 1.5,
               ),
             ),
-            const SizedBox(height: 28),
-            LocalCalendarTile(db: db),
+            const SizedBox(height: 38),
+            _staggeredEntry(0, LocalCalendarTile(db: db)),
             const SizedBox(height: 16),
-            GoogleCalendarTile(db: db),
+            _staggeredEntry(1, GoogleCalendarTile(db: db)),
             const SizedBox(height: 16),
-            OutlookCalendarTile(db: db),
+            _staggeredEntry(2, OutlookCalendarTile(db: db)),
             const SizedBox(height: 20),
           ],
         ),

@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-//import 'package:to_do_app/models/grouping_mode.dart';
 
 class CalendarSyncProvider with ChangeNotifier {
-  //GroupingMode _mode = GroupingMode.Default;
-
-  //GroupingMode get mode => _mode;
-
   bool isSyncing = false;
   double progress = 0.0;
+
+  /// When the last pull from the connected calendars finished. In-memory
+  /// only: a sync runs on every launch, so it is always set soon after start.
+  DateTime? lastSyncedAt;
 
   void startSync() {
     isSyncing = true;
@@ -23,11 +22,18 @@ class CalendarSyncProvider with ChangeNotifier {
   void finishSync() {
     isSyncing = false;
     progress = 1.0;
+    lastSyncedAt = DateTime.now();
+    notifyListeners();
+  }
+
+  /// Hides the progress bar without waiting for the sync to finish. The sync
+  /// itself keeps running in the background.
+  void dismiss() {
+    isSyncing = false;
     notifyListeners();
   }
 
   void notify() {
-    print("----------calendar notified------------");
     notifyListeners(); // tells widgets to rebuild
   }
 }

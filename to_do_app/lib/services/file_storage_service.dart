@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:path/path.dart' as p;
-import 'package:to_do_app/utils/log.dart';
 
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
@@ -40,7 +39,6 @@ class FileStorageService {
     final file = File(filePath);
 
     if (!await file.exists()) {
-      logd("File not found: $filePath");
       throw Exception("File not found: $filePath");
     }
 
@@ -62,11 +60,11 @@ class FileStorageService {
   static Future<void> shareFile(String path) async {
     final file = XFile(path);
 
-    final result = await SharePlus.instance.share(
+    await SharePlus.instance.share(
       ShareParams(files: [file], text: "Check this file!"),
     );
 
-    logd(result.status); // success / dismissed / unavailable
+    // success / dismissed / unavailable
   }
 
   static void deleteFile(File file) async {
@@ -80,24 +78,19 @@ class FileStorageService {
 
     // Optional: handle result
     if (result.type == ResultType.done) {
-      logd("File opened successfully");
-    } else {
-      logd("Error opening file: ${result.message}");
-    }
+    } else {}
   }
 
   // static Future<void> shareFile(File file) async {
   //   try {
-  //     final result = await SharePlus.instance.share(
+  //     await SharePlus.instance.share(
   //       ShareParams(files: [XFile(file.path)]),
   //     );
 
   //     // (Optional) Handle result
   //     if (result.status == ShareResultStatus.success) {
-  //       logd("File shared successfully!");
   //     }
   //   } catch (e) {
-  //     logd("Error sharing file: $e");
   //   }
   // }
 

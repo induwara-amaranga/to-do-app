@@ -1,44 +1,39 @@
-import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
-//import 'package:Outlookapis/calendar/v3.dart';
-//import 'package:Outlookapis/calendar/v3.dart' as gcal;
 import 'package:provider/provider.dart';
+import 'package:to_do_app/components/sync_page_widgets.dart';
 import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/services/Outlook_calendar_service.dart';
-import 'package:to_do_app/services/local_calendar_service.dart';
 import 'package:to_do_app/providers/calendar_sync_provider.dart';
 import 'package:to_do_app/services/outlook_sign.dart';
-import 'package:uuid/uuid.dart';
+
+import 'package:to_do_app/components/brand_logo.dart';
 
 class OutlookCalendarSyncPage extends StatefulWidget {
   final List<Map<String, dynamic>> calendars;
   final ToDoDataBase db;
   final String accountName;
-  //final gcal.CalendarApi calApi;
 
   const OutlookCalendarSyncPage({
     super.key,
-    //required this.calApi,
     required this.accountName,
     required this.calendars,
     required this.db,
   });
 
   @override
-  State<OutlookCalendarSyncPage> createState() => _LocalCalendarSyncPageState();
+  State<OutlookCalendarSyncPage> createState() =>
+      _OutlookCalendarSyncPageState();
 }
 
-class _LocalCalendarSyncPageState extends State<OutlookCalendarSyncPage> {
+class _OutlookCalendarSyncPageState extends State<OutlookCalendarSyncPage> {
+
   bool? syncToCalendar = false;
   late Map<String, bool> importCalendars = {};
   late Map<String, bool> syncCalendars = {};
   List<Map<String, dynamic>> calendars = [];
   bool isImportLoading = false;
-  bool isImportRefreshing = false;
-
   bool isViewOnlyLoading = false;
   bool isSyncing = false;
-  //CalendarSyncProvider provider = CalendarSyncProvider();
 
   @override
   void initState() {
@@ -50,7 +45,6 @@ class _LocalCalendarSyncPageState extends State<OutlookCalendarSyncPage> {
     if (widget.db.syncToCalendars["outlook"] != "none") {
       syncToCalendar = true;
     }
-    final uuid = Uuid();
   }
 
   void _toggleImportCalendar(String calendarId, bool? value) {
@@ -69,12 +63,7 @@ class _LocalCalendarSyncPageState extends State<OutlookCalendarSyncPage> {
     Map<dynamic, dynamic> selectedCalMap,
   ) {
     final selected =
-        calendars
-            .where(
-              (cal) => selectedCalMap[cal["id"]] == true,
-              //cal.id != widget.db.syncToCalendars["Outlook"].hashCode,
-            )
-            .toList();
+        calendars.where((cal) => selectedCalMap[cal["id"]] == true).toList();
 
     if (selected.isEmpty) {
       ScaffoldMessenger.of(
@@ -84,9 +73,6 @@ class _LocalCalendarSyncPageState extends State<OutlookCalendarSyncPage> {
       return [];
     }
 
-    // TODO: implement OutlookCalendarService to import tasks from selected calendars
-    // await OutlookCalendarService.importEvents(selected);
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text("${selected.length} calendar(s) selected for sync"),
@@ -95,14 +81,105 @@ class _LocalCalendarSyncPageState extends State<OutlookCalendarSyncPage> {
     return selected;
   }
 
+  Future<void> _refreshCalendars() async {
+    calendars = await OutlookCalendarService.getAllCalendars();
+    importCalendars = {for (var cal in calendars) cal["id"]!: false};
+    syncCalendars = {for (var cal in calendars) cal["id"]!: false};
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _importSelected() async {
+    setState(() {
+      isImportLoading = true;
+    });
+    final selectedImportCalendars = _getSelectedCalendars(importCalendars);
+    final Map<String, dynamic>? toDoCalendar;
+    toDoCalendar = await OutlookCalendarService.createOrGetCalendar(calendars);
+    if (toDoCalendar == null) {
+      if (mounted) setState(() => isImportLoading = false);
+      return;
+    }
+
+    for (var cal in selectedImportCalendars) {
+      await OutlookCalendarService.importEventsToDB(cal["id"], widget.db);
+    }
+    if (!mounted) return;
+    context.read<CalendarSyncProvider>().notify();
+    setState(() {
+      isImportLoading = false;
+    });
+  }
+
+  Future<void> _showViewOnly() async {
+    setState(() {
+      isViewOnlyLoading = true;
+    });
+    try {
+      final selectedSyncCalendars = _getSelectedCalendars(syncCalendars);
+
+      for (var cal in selectedSyncCalendars) {
+        widget.db.viewOnlyCalendars["outlook"]!.add(cal["id"]!);
+
+        await OutlookCalendarService.importViewOnlyEventsToDB(
+          cal["id"],
+          widget.db,
+        );
+      }
+      if (!mounted) return;
+      context.read<CalendarSyncProvider>().notify();
+      setState(() {
+        isViewOnlyLoading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isViewOnlyLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _setSyncEnabled(bool value) async {
+    setState(() {
+      syncToCalendar = value;
+    });
+    final Map<String, dynamic>? toDoCalendar;
+    if (value) {
+      setState(() {
+        isSyncing = true;
+      });
+      toDoCalendar = await OutlookCalendarService.createOrGetCalendar(
+        calendars,
+      );
+      widget.db.syncToCalendars["outlook"] = toDoCalendar!["id"];
+      try {
+        await OutlookCalendarService.syncTasksToCalendar(
+          widget.db,
+          toDoCalendar["id"],
+        );
+        await OutlookCalendarService.syncTasksFromCalendar(widget.db);
+      } catch (_) {}
+    } else {
+      widget.db.syncToCalendars["outlook"] = "none";
+    }
+    widget.db.updateDataBase();
+    if (!mounted) return;
+    context.read<CalendarSyncProvider>().notify();
+    setState(() {
+      isSyncing = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final todoCalendarId = widget.db.syncToCalendars["outlook"];
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Sync Outlook Calendars"),
+      appBar: syncAppBar(
+        context,
+        "Sync Outlook Calendars",
         actions: [
           IconButton(
-            icon: Icon(Icons.more_vert),
+            icon: const Icon(Icons.more_vert),
             onPressed: () async {
               await OutlookAuthService.signOut();
               if (mounted) Navigator.pop(context);
@@ -110,282 +187,55 @@ class _LocalCalendarSyncPageState extends State<OutlookCalendarSyncPage> {
           ),
         ],
       ),
-      body: Column(
+      body: SyncPageBody(
         children: [
-          const Divider(),
-          Row(
+          ProviderAccountCard(
+            name: "Outlook Calendar",
+            brandIcon: BrandIcon.outlook,
+            subtitle: "Connected as ${widget.accountName}",
+          ),
+          CalendarSection(
+            title: "Import events",
+            description:
+                "Copy events from these calendars into your task list as editable tasks.",
+            actionLabel: "Import",
+            loading: isImportLoading,
+            onRefresh: _refreshCalendars,
+            onApply: _importSelected,
             children: [
-              SizedBox(
-                width: 270,
-                child: Text(
-                  "Import events from following Calendars to Outlook Todolist",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              for (final cal in calendars)
+                if (cal["id"] != todoCalendarId)
+                  CalendarCheckRow(
+                    name: cal["name"] ?? 'Unnamed Calendar',
+                    account: widget.accountName,
+                    checked: importCalendars[cal["id"]] ?? false,
+                    onChanged: (v) => _toggleImportCalendar(cal["id"]!, v),
+                  ),
+            ],
+          ),
+          CalendarSection(
+            title: "View-only events",
+            description:
+                "Show events from these calendars in your task list without importing them.",
+            actionLabel: "Show events",
+            loading: isViewOnlyLoading,
+            onRefresh: _refreshCalendars,
+            onApply: _showViewOnly,
+            children: [
+              for (final cal in calendars)
+                CalendarCheckRow(
+                  name: cal["name"] ?? 'Unnamed Calendar',
+                  account: widget.accountName,
+                  checked: syncCalendars[cal["id"]] ?? false,
+                  onChanged: (v) => _toggleSyncCalendar(cal["id"]!, v),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () async {
-                  calendars = await OutlookCalendarService.getAllCalendars();
-                  //calendars = widget.calendars;
-                  importCalendars = {
-                    for (var cal in calendars) cal["id"]!: false,
-                  };
-                  syncCalendars = {
-                    for (var cal in calendars) cal["id"]!: false,
-                  };
-                  setState(() {});
-                  // TODO: reload calendars if needed
-                },
-              ),
-              isImportLoading
-                  ? Padding(
-                    padding: const EdgeInsets.all(1.0),
-                    child: SizedBox(
-                      width: 30,
-                      height: 30,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  )
-                  : IconButton(
-                    icon: const Icon(Icons.check),
-                    onPressed: () async {
-                      setState(() {
-                        isImportLoading = true;
-                      });
-                      final selectedImportCalendars =
-                          await _getSelectedCalendars(importCalendars);
-                      //print("import");
-                      final Map<String, dynamic>? toDoCalendar;
-                      toDoCalendar =
-                          await OutlookCalendarService.createOrGetCalendar(
-                            calendars,
-                          );
-                      //widget.db.viewOnlyCalendars["Outlook"] = [];
-                      if (toDoCalendar == null) return;
-
-                      for (var cal in selectedImportCalendars) {
-                        //widget.db.viewOnlyCalendars["Outlook"].add(cal.id);
-                        print("to do calendar ${toDoCalendar["name"]}");
-                        print("${cal["name"]}");
-                        await OutlookCalendarService.importEventsToDB(
-                          cal["id"],
-                          widget.db,
-                        );
-                      }
-                      //print("sync value $syncToCalendar");
-                      context.read<CalendarSyncProvider>().notify();
-                      setState(() {
-                        isImportLoading = false;
-                      });
-                      // Pop back to previous screen after import finishes
-                      // if (context.mounted) {
-                      //   Navigator.pop(context);
-                      // }
-                    },
-                  ),
             ],
           ),
-          SizedBox(height: 20),
-          Expanded(
-            child: ListView.builder(
-              itemCount: calendars.length,
-              itemBuilder: (context, index) {
-                final calendar = calendars[index];
-                if (calendar["id"] == widget.db.syncToCalendars["Outlook"]) {
-                  return SizedBox.shrink();
-                }
-                return CheckboxListTile(
-                  title: Text(calendar["name"] ?? 'Unnamed Calendar'),
-                  subtitle: Text(
-                    widget.accountName ?? 'Unknown account',
-                    style: TextStyle(color: Colors.grey.shade500),
-                  ),
-                  value: importCalendars[calendar["id"]],
-                  onChanged:
-                      (value) => _toggleImportCalendar(calendar["id"]!, value),
-                );
-              },
-            ),
-          ),
-          const Divider(),
-          Row(
-            children: [
-              SizedBox(
-                width: 270,
-                child: Text(
-                  "View events from following Calendar in Todolist(view only)",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () async {
-                  calendars = await OutlookCalendarService.getAllCalendars();
-                  //calendars = widget.calendars;
-                  importCalendars = {
-                    for (var cal in calendars) cal["id"]!: false,
-                  };
-                  syncCalendars = {
-                    for (var cal in calendars) cal["id"]!: false,
-                  };
-                  setState(() {});
-                  // TODO: reload calendars if needed
-                },
-              ),
-              isViewOnlyLoading
-                  ? Padding(
-                    padding: const EdgeInsets.all(1.0),
-                    child: SizedBox(
-                      width: 30,
-                      height: 30,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  )
-                  : IconButton(
-                    icon: const Icon(Icons.check),
-                    onPressed: () async {
-                      setState(() {
-                        isViewOnlyLoading = true;
-                      });
-                      try {
-                        final selectedSyncCalendars = _getSelectedCalendars(
-                          syncCalendars,
-                        );
-                        //print("import");
-                        // final gcal.Calendar? toDoCalendar;
-                        // toDoCalendar =
-                        //     await OutlookCalendarService.createOrGetCalendar(
-                        //       calendars,
-                        //     );
-                        // if (toDoCalendar == null) return;
-                        //widget.db.viewOnlyCalendars["Outlook"] = selectedImportCalendars;
-                        //widget.db.calTasks = [];
-
-                        for (var cal in selectedSyncCalendars) {
-                          // Mark calendar as synced
-                          widget.db.viewOnlyCalendars["outlook"]!.add(
-                            cal["id"]!,
-                          );
-
-                          print("Syncing from calendar: ${cal["name"]}");
-
-                          // Fetch events from this calendar
-                          final events =
-                              await OutlookCalendarService.getCalendarEvents(
-                                cal["id"]!,
-                              );
-
-                          await OutlookCalendarService.importViewOnlyEventsToDB(
-                            cal["id"],
-                            widget.db,
-                          );
-                        }
-                        //print("sync value $syncToCalendar");
-                        context.read<CalendarSyncProvider>().notify();
-                        setState(() {
-                          isViewOnlyLoading = false;
-                        });
-                        // Pop back to previous screen after import finishes
-                        // if (context.mounted) {
-                        //   Navigator.pop(context);
-                        // }
-                      } catch (e) {
-                        print("view only error $e");
-                      }
-                    },
-                  ),
-            ],
-          ),
-          SizedBox(height: 20),
-          Expanded(
-            child: ListView.builder(
-              itemCount: calendars.length,
-              itemBuilder: (context, index) {
-                final calendar = calendars[index];
-                return CheckboxListTile(
-                  title: Text(calendar["name"] ?? 'Unnamed Calendar'),
-                  subtitle: Text(
-                    widget.accountName ?? 'Unknown account',
-                    style: TextStyle(color: Colors.grey.shade500),
-                  ),
-                  value: syncCalendars[calendar["id"]],
-                  onChanged:
-                      (value) => _toggleSyncCalendar(calendar["id"]!, value),
-                );
-              },
-            ),
-          ),
-          Divider(),
-          SizedBox(height: 20),
-          Row(
-            children: [
-              Text(
-                "Sync tasks between Outlook Todo list and Calendar",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-              SizedBox(width: 10),
-              isSyncing
-                  ? Padding(
-                    padding: const EdgeInsets.all(1.0),
-                    child: SizedBox(
-                      width: 30,
-                      height: 30,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  )
-                  : SizedBox.shrink(),
-            ],
-          ),
-          CheckboxListTile(
-            title: Text("Select check box to enable syncing to calendar"),
-            subtitle: Text(
-              "A new calendar \"ToDoList\" will be used for syncting.Only upcoming tasks will be synced.Past tasks will not be synced",
-              style: TextStyle(color: Colors.grey.shade500),
-            ),
-            value: syncToCalendar,
-            onChanged: (value) async {
-              setState(() {
-                syncToCalendar = value;
-              });
-              final Map<String, dynamic>? toDoCalendar;
-              print("sync value $syncToCalendar");
-              if (value != null && value) {
-                setState(() {
-                  isSyncing = true;
-                });
-                toDoCalendar = await OutlookCalendarService.createOrGetCalendar(
-                  calendars,
-                );
-                print("to do calendar ${toDoCalendar!["name"]}");
-                widget.db.syncToCalendars["outlook"] = toDoCalendar["id"];
-                try {
-                  await OutlookCalendarService.syncTasksToCalendar(
-                    widget.db,
-                    toDoCalendar["id"],
-                  );
-                  await OutlookCalendarService.syncTasksFromCalendar(widget.db);
-                  //print("tasks added");
-                } catch (d) {
-                  print("failded to sync calendars");
-                }
-              } else {
-                widget.db.syncToCalendars["outlook"] = "none";
-              }
-              widget.db.updateDataBase();
-              context.read<CalendarSyncProvider>().notify();
-              setState(() {
-                isSyncing = false;
-              });
-            },
+          SyncTasksSection(
+            calendarName: "Outlook Calendar",
+            value: syncToCalendar ?? false,
+            syncing: isSyncing,
+            onChanged: _setSyncEnabled,
           ),
         ],
       ),

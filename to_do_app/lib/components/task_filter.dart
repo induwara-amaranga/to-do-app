@@ -204,16 +204,6 @@ class _TaskFilterState extends State<TaskFilter> {
                       'categories': selectedCategories,
                       'selectedDueDates': selectedDates,
                     });
-                    print(
-                      "Filters:--------------------------------------------- \n"
-                      "completed=$showCompleted,"
-                      "pending=$showPending, "
-                      "priority=$highPriorityOnly, "
-                      "selectedFilter=$selectedFilter, "
-                      "dueDate=$_selectedDueDate, "
-                      "categories=$selectedCategories, "
-                      "selectedDates=$selectedDates",
-                    );
                     Navigator.pop(context); //doesnt close backend of dialog
                   },
                   child: const Text("Apply"),

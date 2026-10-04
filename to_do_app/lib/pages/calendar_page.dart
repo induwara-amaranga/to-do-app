@@ -13,7 +13,10 @@ import 'package:to_do_app/models/types.dart';
 import 'package:to_do_app/services/local_calendar_service.dart';
 import 'package:to_do_app/services/notification_service.dart';
 import 'package:to_do_app/services/repeat_task.dart';
+import 'package:to_do_app/themes/app_colors.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
+
+import 'package:to_do_app/components/calendar_events_header.dart';
 
 class CalendarPage extends StatefulWidget {
   final ToDoDataBase db;
@@ -37,8 +40,6 @@ class _CalendarPageState extends State<CalendarPage> {
   bool _isStarred = false;
 
   void checkBoxChanged(bool? value, int index) {
-    print("Checkbox at index $index changed to $value");
-
     if (value != null) {
       if (value) {
         db.toDoList[index].completedAt = DateTime.now().toUtc().toString();
@@ -95,7 +96,6 @@ class _CalendarPageState extends State<CalendarPage> {
       notificationIds: [],
     );
     setState(() {
-      print("adding tasks $taskDetails");
       db.toDoList.add(task);
     });
 
@@ -109,12 +109,9 @@ class _CalendarPageState extends State<CalendarPage> {
         toDoList.length - 1,
       );
     }
-    print("A F T E R   N E W   T A S K-----------------------------");
-    print(db.toDoList);
     toDoList = db.toDoList;
     db.updateDataBase();
     if (db.syncToCalendars["local"] != "none") {
-      print("🔄");
       LocalCalendarService.addEvent(db.syncToCalendars["local"], task);
     }
   }
@@ -125,7 +122,6 @@ class _CalendarPageState extends State<CalendarPage> {
       db.syncToCalendars["local"],
     );
     for (int id in db.toDoList[index].notificationIds) {
-      print("calling to id $id for edited task");
       await NotificationService.cancelNotification(id);
     }
     setState(() {
@@ -134,9 +130,7 @@ class _CalendarPageState extends State<CalendarPage> {
     toDoList = db.toDoList;
     db.updateDataBase();
     if (db.syncToCalendars["local"] != "none" &&
-        db.toDoList[index].remoteEventIds[0] != "") {
-      print("🔄");
-    }
+        db.toDoList[index].remoteEventIds[0] != "") {}
   }
 
   void editTask(int index, Map<String, dynamic> taskDetails) async {
@@ -160,7 +154,6 @@ class _CalendarPageState extends State<CalendarPage> {
     });
 
     for (int id in db.toDoList[index].notificationIds) {
-      print("calling to id $id for edited task");
       await NotificationService.cancelNotification(id);
     }
 
@@ -204,10 +197,8 @@ class _CalendarPageState extends State<CalendarPage> {
       //     ],
       //   );
       // } catch (e) {
-      //   print("shedule error form task page => $e");
       // }
     }
-    print("Edited task at index $index: ${db.toDoList[index]}");
     toDoList = db.toDoList;
     // categorizedToDOTasks =
     //     _taskCategoryTabs().map((tab) {
@@ -215,7 +206,6 @@ class _CalendarPageState extends State<CalendarPage> {
     //     }).toList();
     //hotTasks = getUpcomingTasksWithinHotPeriod(toDoList);
     if (db.syncToCalendars["local"] != "none") {
-      print("🔄");
       LocalCalendarService.addEvent(
         db.syncToCalendars["local"],
         db.toDoList[index],
@@ -290,6 +280,69 @@ class _CalendarPageState extends State<CalendarPage> {
     day: day,
   );
 
+  void _toggleCalendarEvents() {
+    setState(() {
+      db.settings = db.settings.copyWith(
+        calendarEventsCollapsed: !db.settings.calendarEventsCollapsed,
+      );
+    });
+    db.saveSettings();
+  }
+
+  // ── Day markers ──────────────────────────────────────────────────────────
+  // Local calendar days that have a one-off task/event, rebuilt once per
+  // build. Repeating items are checked per visible day instead, since they
+  // land on many days. This avoids scanning every task for each of the ~35
+  // cells the month grid asks about.
+  final Set<DateTime> _dueDays = {};
+  final List<({String? date, String? time, String? repeat, bool done})>
+  _repeating = [];
+
+  void _indexDays() {
+    _dueDays.clear();
+    _repeating.clear();
+    void add(String? date, String? time, String? repeat, bool done) {
+      if (date == null || date == "0000-00-00") return;
+      final due = DateTimeUtilsHelper.toLocalUsingTz(
+        DateTimeUtilsHelper.combineDateAndTimeFromStrings(
+          date,
+          time ?? "00:00",
+        ),
+      );
+      _dueDays.add(DateTime(due.year, due.month, due.day));
+      if (!done && repeat != null && repeat != "none") {
+        _repeating.add((date: date, time: time, repeat: repeat, done: done));
+      }
+    }
+
+    for (final t in db.toDoList) {
+      add(t.dueDate, t.dueTime, t.repeatType, t.completed);
+    }
+    for (final e in [
+      ...db.localCalTasks,
+      ...db.googleCalTasks,
+      ...db.outlookCalTasks,
+    ]) {
+      add(e.dueDate, e.dueTime, e.repeatType, e.completed);
+    }
+  }
+
+  bool _hasItemsOn(DateTime day) {
+    if (_dueDays.contains(DateTime(day.year, day.month, day.day))) return true;
+    for (final r in _repeating) {
+      if (_isOnDay(
+        dueDate: r.date,
+        dueTime: r.time,
+        completed: r.done,
+        repeatType: r.repeat,
+        day: day,
+      )) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -303,17 +356,18 @@ class _CalendarPageState extends State<CalendarPage> {
   @override
   Widget build(BuildContext context) {
     focusedDay = DateTime.now();
+    _indexDays();
     return Scaffold(
       bottomNavigationBar: TaskBottomNavBar(current: 0),
       appBar: AppBar(
+        centerTitle: true,
         title: Text(
-          '         Calendar',
+          'Calendar',
           style: TextStyle(
             fontFamily: 'Manrope',
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w800,
             fontSize: 20,
-            letterSpacing: -0.4,
-            color: Theme.of(context).colorScheme.primary,
+            color: kAccent,
           ),
         ),
       ),
@@ -321,7 +375,7 @@ class _CalendarPageState extends State<CalendarPage> {
         children: [
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
 
               boxShadow: [
@@ -345,9 +399,29 @@ class _CalendarPageState extends State<CalendarPage> {
                   //fontWeight: FontWeight.w600,
                   color: Theme.of(context).colorScheme.onSurface,
                 ),
-                leftChevronIcon: Icon(Icons.chevron_left, size: 28),
-                rightChevronIcon: Icon(Icons.chevron_right, size: 28),
-                headerPadding: EdgeInsets.symmetric(vertical: 12),
+                headerPadding: const EdgeInsets.symmetric(vertical: 12),
+                formatButtonPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                formatButtonTextStyle: TextStyle(
+                  fontSize: 12,
+                  color: context.appColors.muted,
+                ),
+                formatButtonDecoration: BoxDecoration(
+                  border: Border.all(color: context.appColors.muted),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                leftChevronIcon: Icon(
+                  Icons.chevron_left,
+                  size: 28,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                rightChevronIcon: Icon(
+                  Icons.chevron_right,
+                  size: 28,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
               ),
               availableCalendarFormats: const {
                 CalendarFormat.month: 'Month',
@@ -360,19 +434,57 @@ class _CalendarPageState extends State<CalendarPage> {
                   calendarFormat = format;
                 });
               },
+              rowHeight: 46,
+              daysOfWeekHeight: 28,
+              eventLoader: (day) => _hasItemsOn(day) ? const [1] : const [],
+              daysOfWeekStyle: DaysOfWeekStyle(
+                weekdayStyle: TextStyle(
+                  fontSize: 12,
+                  color: context.appColors.muted,
+                ),
+                weekendStyle: TextStyle(
+                  fontSize: 12,
+                  color: context.appColors.muted,
+                ),
+              ),
               calendarStyle: CalendarStyle(
+                cellMargin: const EdgeInsets.all(5),
+                defaultTextStyle: TextStyle(
+                  fontSize: 15,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                weekendTextStyle: TextStyle(
+                  fontSize: 15,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                outsideTextStyle: TextStyle(
+                  fontSize: 15,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.35),
+                ),
                 todayDecoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.tertiary,
                   shape: BoxShape.circle,
                 ),
-                selectedDecoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
+                todayTextStyle: const TextStyle(
+                  fontSize: 15,
+                  color: Colors.white,
+                ),
+                selectedDecoration: const BoxDecoration(
+                  color: kAccent,
                   shape: BoxShape.circle,
                 ),
-                markerDecoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.secondary,
+                selectedTextStyle: const TextStyle(
+                  fontSize: 15,
+                  color: kOnAccent,
+                ),
+                markerDecoration: const BoxDecoration(
+                  color: kAccent,
                   shape: BoxShape.circle,
                 ),
+                markersMaxCount: 1,
+                markerSize: 4,
               ),
 
               focusedDay: focusedDay,
@@ -408,80 +520,97 @@ class _CalendarPageState extends State<CalendarPage> {
                       'Tasks',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
+                        color: kAccent,
                       ),
                     ),
                   ),
-                ...tasksForSelectedDay.map((task) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 4,
-                      horizontal: 8,
-                    ),
-                    child: TaskTile(
-                      source: task.source,
-                      disableCompleted: () {
-                        setState(() {});
-                      },
-                      key: ValueKey(
-                        '${task.name}_${task.id}_${task.toString()}',
+                ...() {
+                  // Position lookup built once, not an O(n) indexOf per tile.
+                  final indexOfTask = Map<Task, int>.identity();
+                  for (int i = 0; i < toDoList.length; i++) {
+                    indexOfTask[toDoList[i]] = i;
+                  }
+                  return tasksForSelectedDay.map((task) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 4,
+                        horizontal: 8,
                       ),
-                      initialSubtasks:
-                          task.subtasks.map((s) => s.toMap()).toList(),
-                      index: toDoList.indexOf(task),
-                      isStarred: task.isStarred,
-                      taskName: task.name,
-                      taskCompleted: task.completed,
-                      taskNote: task.note ?? '',
-                      dueDate: DateTimeUtilsHelper.parseDate(task.dueDate),
-                      dueTime:
-                          task.dueTime != "00:00"
-                              ? DateTimeUtilsHelper.parseTime(task.dueTime!)
-                              : null,
-                      taskCategory: task.category,
-                      taskPriority: task.priority,
-                      repeatType: task.repeatType!,
-                      remainderAmount: task.reminderAmount,
-                      remainderType: task.reminderType!,
-                      onChanged:
-                          (index, value) => checkBoxChanged(value, index),
-                      deleteFunction:
-                          (context) => deleteTask(toDoList.indexOf(task)),
-                      onEdit:
-                          (index, taskDetails) => editTask(index, taskDetails),
-                      repeatTypes: repeatTypes,
-                      priorityTypes: priorityTypes,
-                      remainderTypes: remainderTypes,
-                      categoryTypes: widget.db.categories,
-                      playCompletionTone: db.settings.completionTone,
-                      playCompletionAnimation: db.settings.completionAnimation,
-                      settings: db.settings,
-                    ),
-                  );
-                }),
-                if (calTasksForSelectedDay.isNotEmpty)
-                  Padding(
+                      child: TaskTile(
+                        source: task.source,
+                        disableCompleted: () {
+                          setState(() {});
+                        },
+                        key: ObjectKey(task),
+                        initialSubtasks:
+                            task.subtasks.map((s) => s.toMap()).toList(),
+                        index: indexOfTask[task] ?? toDoList.indexOf(task),
+                        isStarred: task.isStarred,
+                        taskName: task.name,
+                        taskCompleted: task.completed,
+                        taskNote: task.note ?? '',
+                        dueDate: DateTimeUtilsHelper.parseDate(task.dueDate),
+                        dueTime:
+                            task.dueTime != "00:00"
+                                ? DateTimeUtilsHelper.parseTime(task.dueTime!)
+                                : null,
+                        taskCategory: task.category,
+                        taskPriority: task.priority,
+                        repeatType: task.repeatType!,
+                        remainderAmount: task.reminderAmount,
+                        remainderType: task.reminderType!,
+                        onChanged:
+                            (index, value) => checkBoxChanged(value, index),
+                        deleteFunction:
+                            (context) => deleteTask(toDoList.indexOf(task)),
+                        onEdit:
+                            (index, taskDetails) =>
+                                editTask(index, taskDetails),
+                        repeatTypes: repeatTypes,
+                        priorityTypes: priorityTypes,
+                        remainderTypes: remainderTypes,
+                        categoryTypes: widget.db.categories,
+                        playCompletionTone: db.settings.completionTone,
+                        playCompletionAnimation:
+                            db.settings.completionAnimation,
+                        settings: db.settings,
+                      ),
+                    );
+                  });
+                }(),
+                if (calTasksForSelectedDay.isNotEmpty) ...[
+                  CalendarEventsHeader(
+                    count: calTasksForSelectedDay.length,
+                    collapsed: db.settings.calendarEventsCollapsed,
+                    onToggle: _toggleCalendarEvents,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 8,
                     ),
-                    child: Text(
-                      'Calendar Events ${calTasksForSelectedDay.length > 1 ? "(${calTasksForSelectedDay.length})" : ""}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
                   ),
-                ...calTasksForSelectedDay.map(
-                  (task) => Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    child: SyncTile(task: task, settings: db.settings),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 200),
+                    alignment: Alignment.topCenter,
+                    child:
+                        db.settings.calendarEventsCollapsed
+                            ? const SizedBox(width: double.infinity)
+                            : Column(
+                              children: [
+                                for (final task in calTasksForSelectedDay)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    child: SyncTile(
+                                      task: task,
+                                      settings: db.settings,
+                                    ),
+                                  ),
+                              ],
+                            ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -489,12 +618,11 @@ class _CalendarPageState extends State<CalendarPage> {
         ],
       ),
       floatingActionButton: Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Theme.of(context).colorScheme.primary,
-        ),
+        decoration: BoxDecoration(shape: BoxShape.circle, color: kAccent),
         child: FloatingActionButton(
           heroTag: "Add_Task",
+          backgroundColor: kAccent,
+          foregroundColor: kOnAccent,
           onPressed:
               () => showModalBottomSheet(
                 isScrollControlled: true,
@@ -525,7 +653,6 @@ class _CalendarPageState extends State<CalendarPage> {
                         //   _addedSubtasks = taskDetails['subTasks'] ?? [];
                         //   _isStarred = taskDetails['isStarred'];
                         // });
-                        print("New task details: $taskDetails");
                         saveNewTask(taskDetails);
                       },
                       repeatTypes: repeatTypes,
@@ -544,7 +671,6 @@ class _CalendarPageState extends State<CalendarPage> {
                     ),
               ),
           child: const Icon(Icons.add_rounded),
-          backgroundColor: Theme.of(context).colorScheme.primary,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(30),
           ),

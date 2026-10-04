@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:to_do_app/components/task_tile.dart';
 //import 'package:table_calendar/table_calendar.dart';
-import 'package:to_do_app/components/tasktile.dart';
 import 'package:to_do_app/models/settings.dart';
 import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/services/filter_tasks_service.dart';
@@ -134,8 +132,6 @@ class _FilteredtaskspageState extends State<Filteredtaskspage> {
 
   @override
   Widget build(BuildContext context) {
-    print("filteredTasks:$filteredTasks");
-
     final colorScheme = Theme.of(context).colorScheme;
     final filterChips = _buildFilterChips(colorScheme);
 
@@ -247,84 +243,80 @@ class _FilteredtaskspageState extends State<Filteredtaskspage> {
                       ),
                     ),
                     Expanded(
-                      child: SingleChildScrollView(
-                        child: ReorderableListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: filteredTasks.length,
-                          onReorder: (oldIndex, newIndex) {
-                            setState(() {
-                              if (newIndex > oldIndex) newIndex -= 1;
-                              final item = filteredTasks.removeAt(oldIndex);
-                              filteredTasks.insert(newIndex, item);
-                            });
-                          },
-                          itemBuilder: (context, index) {
-                            final task = filteredTasks[index];
+                      // A plain lazily-built list: the old SingleChildScrollView
+                      // + shrinkWrap combination laid out every result at once.
+                      child: ReorderableListView.builder(
+                        itemCount: filteredTasks.length,
+                        onReorder: (oldIndex, newIndex) {
+                          setState(() {
+                            if (newIndex > oldIndex) newIndex -= 1;
+                            final item = filteredTasks.removeAt(oldIndex);
+                            filteredTasks.insert(newIndex, item);
+                          });
+                        },
+                        itemBuilder: (context, index) {
+                          final task = filteredTasks[index];
 
-                            return Container(
-                              key: ValueKey(task.name + index.toString()),
-                              margin: const EdgeInsets.symmetric(
-                                vertical: 4,
-                                horizontal: 12,
+                          return Container(
+                            key: ObjectKey(task),
+                            margin: const EdgeInsets.symmetric(
+                              vertical: 4,
+                              horizontal: 12,
+                            ),
+                            child: TaskTile(
+                              source: task.source,
+                              disableCompleted: () {},
+                              initialSubtasks:
+                                  task.subtasks.map((s) => s.toMap()).toList(),
+                              index: widget.toDoList.indexOf(task),
+                              isStarred: task.isStarred,
+                              taskName: task.name,
+                              taskCompleted: task.completed,
+                              taskNote: task.note ?? '',
+                              dueDate: DateTimeUtilsHelper.parseDate(
+                                task.dueDate,
                               ),
-                              child: TaskTile(
-                                source: task.source,
-                                disableCompleted: () {},
-                                initialSubtasks:
-                                    task.subtasks
-                                        .map((s) => s.toMap())
-                                        .toList(),
-                                index: widget.toDoList.indexOf(task),
-                                isStarred: task.isStarred,
-                                taskName: task.name,
-                                taskCompleted: task.completed,
-                                taskNote: task.note ?? '',
-                                dueDate: DateFormat(
-                                  'yyyy-MM-dd',
-                                ).parse(task.dueDate!),
-                                dueTime:
-                                    task.dueTime != "00:00"
-                                        ? DateFormat(
-                                          "HH:mm",
-                                        ).parse(task.dueTime!)
-                                        : null,
-                                taskCategory: task.category,
-                                taskPriority: task.priority,
-                                repeatType: task.repeatType!,
-                                remainderAmount: task.reminderAmount,
-                                remainderType: task.reminderType!,
-                                onChanged: (index, value) {
-                                  setState(() {
-                                    widget.onChanged?.call(index, value);
-                                  });
-                                },
-                                deleteFunction: (index) {
-                                  setState(() {
-                                    widget.deleteFunction?.call(index);
-                                  });
-                                },
-                                onEdit: (index, taskDetails) {
-                                  setState(() {
-                                    widget.onTaskChanged?.call(
-                                      index,
-                                      taskDetails,
-                                    );
-                                  });
-                                },
-                                repeatTypes: repeatTypes,
-                                priorityTypes: priorityTypes,
-                                remainderTypes: remainderTypes,
-                                categoryTypes: widget.categoryTypes,
-                                playCompletionTone:
-                                    widget.settings.completionTone,
-                                playCompletionAnimation:
-                                    widget.settings.completionAnimation,
-                                settings: widget.settings,
-                              ),
-                            );
-                          },
-                        ),
+                              dueTime:
+                                  task.dueTime != "00:00"
+                                      ? DateTimeUtilsHelper.parseTime(
+                                        task.dueTime!,
+                                      )
+                                      : null,
+                              taskCategory: task.category,
+                              taskPriority: task.priority,
+                              repeatType: task.repeatType!,
+                              remainderAmount: task.reminderAmount,
+                              remainderType: task.reminderType!,
+                              onChanged: (index, value) {
+                                setState(() {
+                                  widget.onChanged?.call(index, value);
+                                });
+                              },
+                              deleteFunction: (index) {
+                                setState(() {
+                                  widget.deleteFunction?.call(index);
+                                });
+                              },
+                              onEdit: (index, taskDetails) {
+                                setState(() {
+                                  widget.onTaskChanged?.call(
+                                    index,
+                                    taskDetails,
+                                  );
+                                });
+                              },
+                              repeatTypes: repeatTypes,
+                              priorityTypes: priorityTypes,
+                              remainderTypes: remainderTypes,
+                              categoryTypes: widget.categoryTypes,
+                              playCompletionTone:
+                                  widget.settings.completionTone,
+                              playCompletionAnimation:
+                                  widget.settings.completionAnimation,
+                              settings: widget.settings,
+                            ),
+                          );
+                        },
                       ),
                     ),
                     //SizedBox(height: 20),

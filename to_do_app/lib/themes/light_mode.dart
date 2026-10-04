@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:to_do_app/themes/app_colors.dart';
 
 ThemeData lightMode = ThemeData(
   colorScheme: ColorScheme.light(
@@ -14,4 +15,5 @@ ThemeData lightMode = ThemeData(
     surface: Colors.white,
     onSurface: Colors.black,
   ),
+  extensions: const [AppColors.light],
 );

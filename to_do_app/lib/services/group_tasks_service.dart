@@ -9,6 +9,7 @@ class GroupTasksService {
     GroupingMode mode,
     bool isCompleted,
   ) {
+    final DateTime now = DateTime.now();
     switch (mode) {
       case GroupingMode.Default:
         if (isCompleted) {
@@ -23,7 +24,6 @@ class GroupTasksService {
                 DateTimeUtilsHelper.parseDate(task.dueDate) ??
                 DateTime(1971, 01, 01);
 
-            DateTime now = DateTime.now();
             if (taskDate.year == now.year &&
                 taskDate.month == now.month &&
                 taskDate.day == now.day) {
@@ -47,7 +47,6 @@ class GroupTasksService {
                 DateTimeUtilsHelper.parseDate(task.dueDate) ??
                 DateTime(1971, 01, 01);
 
-            DateTime now = DateTime.now();
             if (taskDate.year == now.year &&
                 taskDate.month == now.month &&
                 taskDate.day == now.day) {

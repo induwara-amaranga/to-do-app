@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:to_do_app/themes/app_colors.dart';
 //import 'package:to_do_app/pages/task_page.dart';
 
 class TaskBottomNavBar extends StatefulWidget {
@@ -34,10 +35,14 @@ class _BottomNavBarState extends State<TaskBottomNavBar> {
       ],
       currentIndex: current,
 
-      selectedItemColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      selectedItemColor: kAccent,
       unselectedItemColor: Theme.of(
         context,
-      ).colorScheme.onSurface.withAlpha(100),
+      ).colorScheme.onSurface.withValues(alpha: 0.45),
+      selectedFontSize: 12,
+      unselectedFontSize: 12,
+      selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500),
       onTap: (index) {
         if (index == 1) {
           Navigator.pushNamed(context, '/');

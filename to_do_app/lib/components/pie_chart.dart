@@ -66,7 +66,6 @@ class _MyPieChartState extends State<MyPieChart> {
   @override
   Widget build(BuildContext context) {
     shade = -offset;
-    //print("${widget.mappedPending}");
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [

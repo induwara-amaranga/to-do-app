@@ -9,7 +9,6 @@ import 'package:to_do_app/services/notification_service.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 import 'package:uuid/uuid.dart';
 import '../data/database.dart';
-import 'package:to_do_app/utils/log.dart';
 
 class ImportFromIcsService {
   static var uuid = Uuid();
@@ -31,17 +30,7 @@ class ImportFromIcsService {
     final parsed =
         events.map((event) {
           DateTime? _startDate;
-          DateTime? startDate;
           try {
-            try {
-              if (event['dtstart'] != null && event['dtstart'] is IcsDateTime) {
-                final icsDate = event['dtstart'] as IcsDateTime;
-                startDate = DateTime.tryParse(icsDate.dt);
-              }
-            } catch (e) {
-              logd("Error parsing start date: $e");
-            }
-
             _startDate =
                 event['DTSTART'] != null
                     ? DateTime.tryParse(
@@ -56,9 +45,6 @@ class ImportFromIcsService {
                           : event['dtstart'].dt,
                     )
                     : null;
-            logd("event $event");
-            logd("DTSTART ${event['dtstart'].dt}");
-            logd("Parsed start date: $startDate");
           } catch (_) {}
 
           return {
@@ -101,7 +87,6 @@ class ImportFromIcsService {
       //   task['dueDate'],
       // );
       final utcTime = DateTimeUtilsHelper.toUtcUsingLocal(task["dueDate"]);
-      logd("utc time $utcTime  ${task["dueDate"]}");
 
       db.toDoList.add(
         Task(

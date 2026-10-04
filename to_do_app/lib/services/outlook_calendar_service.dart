@@ -8,7 +8,6 @@ import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/services/outlook_sign.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 import 'dart:convert';
-import 'package:to_do_app/utils/log.dart';
 
 import 'package:uuid/uuid.dart';
 
@@ -22,7 +21,6 @@ class OutlookCalendarService {
   //   //   authority:
   //   //       "https://login.microsoftonline.com/common", // use your tenant if needed
   //   // );
-  //   // logd("getting token....");
   //   try {
   //     //   final result = await _pca.acquireToken(_scopes);
   //     //   _accessToken = result;
@@ -43,10 +41,8 @@ class OutlookCalendarService {
   //     // );
   //     await init();
   //     _accessToken = await signIn();
-  //     logd("✅ Access Token: $_accessToken");
   //     return true;
   //   } catch (e) {
-  //     logd("❌ Sign-in failed: $e");
   //     return false;
   //   }
   //   //return true;
@@ -68,7 +64,6 @@ class OutlookCalendarService {
     );
 
     if (existing.isNotEmpty) {
-      logd('✅ Calendar "ToDoList" already exists: ${existing['id']}');
       return existing;
     }
 
@@ -90,11 +85,9 @@ class OutlookCalendarService {
 
     if (response.statusCode == 201) {
       final newCalendar = jsonDecode(response.body);
-      logd('✅ Created new calendar "ToDoList": ${newCalendar['id']}');
       calendars.add(newCalendar);
       return newCalendar;
     } else {
-      logd("❌ Failed to create calendar: ${response.body}");
       return null;
     }
   }
@@ -113,14 +106,8 @@ class OutlookCalendarService {
       final data = jsonDecode(response.body);
       final List calendars = data['value'];
 
-      logd("📅 Found ${calendars.length} Outlook calendars");
-      for (final c in calendars) {
-        logd("- ${c['name']} (${c['id']})");
-      }
-
       return calendars.cast<Map<String, dynamic>>();
     } else {
-      logd("❌ Error = fetching calendars: ${response.body}");
       return [];
     }
   }
@@ -143,7 +130,6 @@ class OutlookCalendarService {
       final data = jsonDecode(response.body);
       return List<Map<String, dynamic>>.from(data['value']);
     } else {
-      logd("❌ Error - fetching events: ${response.body}");
       return [];
     }
   }
@@ -162,12 +148,8 @@ class OutlookCalendarService {
     );
 
     if (response.statusCode == 204) {
-      logd("🗑️ Event deleted successfully: $eventId");
       return true;
     } else {
-      logd(
-        "❌ Failed to delete event: ${response.statusCode} — ${response.body}",
-      );
       return false;
     }
   }
@@ -178,14 +160,12 @@ class OutlookCalendarService {
     Task eventData,
   ) async {
     if (_accessToken == null) throw Exception('Not signed in');
-    logd("add or update event to outlook called with data: $eventData");
 
     final String? eventId = eventData.remoteEventIds[2];
 
     // If event ID is provided → check if it exists
     bool exists = false;
     if (eventId != null) {
-      logd("Checking if event exists: $eventId");
       final checkUrl = Uri.parse(
         "https://graph.microsoft.com/v1.0/me/calendars/$calendarId/events/$eventId",
       );
@@ -197,10 +177,8 @@ class OutlookCalendarService {
 
       if (checkResponse.statusCode == 200) {
         final data = jsonDecode(checkResponse.body);
-        logd("Event data fetched for existence check: $data");
         // Verify that the event actually belongs to your target calendar
         if (data['id'] == eventId /* && data['calendarId'] == calendarId*/ ) {
-          logd("Event exists in the correct calendar");
           exists = true;
         }
       }
@@ -208,7 +186,6 @@ class OutlookCalendarService {
     String start = "";
     String end = "";
     try {
-      logd("Preparing to add/update event: ${eventData.name}");
       start =
           DateTimeUtilsHelper.combineDateAndTimeFromStrings(
             eventData.dueDate!,
@@ -219,11 +196,7 @@ class OutlookCalendarService {
             eventData.dueDate!,
             eventData.dueTime!,
           ).add(Duration(hours: 1)).toIso8601String();
-      logd("Start time: $start");
-      logd("End time: $end");
-    } catch (e) {
-      logd("date time error: $e");
-    }
+    } catch (_) {}
     // 1️⃣ Build event JSON body (example mapping)
     final Map<String, dynamic> eventBody = {
       "subject": eventData.name,
@@ -237,7 +210,6 @@ class OutlookCalendarService {
     }
 
     if (exists) {
-      logd("Updating existing event: $eventId");
       // 🔄 Update existing event
       final updateUrl = Uri.parse(
         "https://graph.microsoft.com/v1.0/me/calendars/$calendarId/events/$eventId",
@@ -253,17 +225,10 @@ class OutlookCalendarService {
       );
 
       if (response.statusCode == 200) {
-        logd("outlook==============>✅ Event updated successfully: $eventId");
         eventData.remoteEventIds[2] = jsonDecode(response.body)['id'];
-        logd("Updated event ID: ${eventData.remoteEventIds[2]}");
-      } else {
-        logd(
-          "❌ Failed to update event: ${response.statusCode} — ${response.body}",
-        );
-      }
+      } else {}
     } else {
       //Print();
-      logd("Creating new event");
       // ➕ Create new event
       final createUrl = Uri.parse(
         "https://graph.microsoft.com/v1.0/me/calendars/$calendarId/events",
@@ -279,14 +244,8 @@ class OutlookCalendarService {
       );
 
       if (response.statusCode == 201) {
-        logd("outlook=========>✅ New event created successfully");
         eventData.remoteEventIds[2] = jsonDecode(response.body)['id'];
-        logd("New event ID: ${eventData.remoteEventIds[2]}");
-      } else {
-        logd(
-          "❌ Failed to create event: ${response.statusCode} — ${response.body}",
-        );
-      }
+      } else {}
     }
   }
 
@@ -296,8 +255,6 @@ class OutlookCalendarService {
     ToDoDataBase db,
   ) async {
     if (_accessToken == null) throw Exception('Not signed in');
-
-    logd('🔁 Fetching events from Outlook calendar: $calendarId');
 
     // Microsoft Graph endpoint
     final url = Uri.parse(
@@ -310,13 +267,11 @@ class OutlookCalendarService {
     );
 
     if (response.statusCode != 200) {
-      logd('❌ Failed to fetch Outlook events: ${response.body}');
       return;
     }
 
     final data = jsonDecode(response.body);
     final events = List<Map<String, dynamic>>.from(data['value']);
-    logd('📅 Found ${events.length} events in Outlook');
 
     // Pre-fetch recurrence for occurrence instances (recurrence is only on the master)
     final Map<String, String> masterRepeatTypeCache = {};
@@ -328,9 +283,6 @@ class OutlookCalendarService {
         );
       }
     }
-
-    int importedCount = 0;
-    int updatedCount = 0;
 
     for (final e in events) {
       if (e['start'] == null) continue;
@@ -372,7 +324,6 @@ class OutlookCalendarService {
         t.reminderType = 'none';
         t.isStarred = false;
         t.subtasks = [];
-        updatedCount++;
         continue;
       }
 
@@ -401,14 +352,9 @@ class OutlookCalendarService {
           notificationIds: [],
         ),
       );
-      importedCount++;
     }
 
     await db.updateDataBase();
-
-    logd(
-      '✅ Imported $importedCount new events, updated $updatedCount existing ones.',
-    );
   }
 
   /// (Optional) Setter for access token from login
@@ -423,8 +369,6 @@ class OutlookCalendarService {
   ) async {
     if (_accessToken == null) throw Exception('Not signed in');
 
-    logd('📥 Importing view-only events from Outlook calendar: $calendarId');
-
     // Fetch events
     final url = Uri.parse(
       "https://graph.microsoft.com/v1.0/me/calendars/$calendarId/events?\$select=id,subject,bodyPreview,start,end,recurrence,type,seriesMasterId",
@@ -436,14 +380,11 @@ class OutlookCalendarService {
     );
 
     if (response.statusCode != 200) {
-      logd('❌ Failed to fetch view-only events: ${response.body}');
       return;
     }
 
     final data = jsonDecode(response.body);
     final events = List<Map<String, dynamic>>.from(data['value']);
-
-    logd('📅 Found ${events.length} view-only events.');
 
     // Pre-fetch recurrence for occurrence instances (recurrence is only on the master)
     final Map<String, String> masterRepeatTypeCache = {};
@@ -456,14 +397,10 @@ class OutlookCalendarService {
       }
     }
 
-    int importedCount = 0;
-    int updatedCount = 0;
-
     for (final e in events) {
       if (e['start'] == null) continue;
 
       final startRaw = e['start']['dateTime'];
-      logd('Event start raw: $startRaw');
       if (startRaw == null) continue;
 
       final start = DateTime.parse(startRaw).toLocal();
@@ -504,7 +441,6 @@ class OutlookCalendarService {
         t.reminderType = 'none';
         t.isStarred = false;
         t.subtasks = [];
-        updatedCount++;
         continue;
       }
 
@@ -532,47 +468,32 @@ class OutlookCalendarService {
           completedAt: "none",
         ),
       );
-
-      importedCount++;
     }
 
     await db.updateDataBase();
-
-    logd(
-      '✅ Imported $importedCount view-only events, updated $updatedCount existing ones.',
-    );
   }
 
   static Future<void> syncTasksToCalendar(
     ToDoDataBase db,
     String calendarID,
   ) async {
-    logd("Sync to ------------------------------------------------");
-    int count = 0;
     //final calendar = await ensureToDoListCalendar();
     final tasksToSync = List<Task>.from(db.toDoList);
     for (var task in tasksToSync) {
       if (task.source == "repeat") continue;
       try {
         await addOrUpdateEvent(calendarID, task);
-        count++;
-      } catch (e) {
-        logd('❌ Failed to sync to ${calendarID} task :"${task.name}".');
-      }
+      } catch (_) {}
     }
-    logd("📅 $count tasks added/updated to outlook calendar");
   }
 
   static Future<void> syncTasksFromCalendar(ToDoDataBase db) async {
-    logd("sync from------------------------------");
     final calID = db.syncToCalendars["outlook"];
     //db.outlookCalTasks.removeWhere((t) => t[14] == calID);
     //List<dynamic> events = await getEvents(calID);
     try {
       await importViewOnlyEventsToDB(calID, db);
-    } catch (e) {
-      logd("Sync from error $e");
-    }
+    } catch (_) {}
   }
 
   static Future<String> _fetchMasterRepeatType(String masterId) async {
@@ -590,14 +511,11 @@ class OutlookCalendarService {
           data['recurrence'] as Map<String, dynamic>?,
         );
       }
-    } catch (e) {
-      logd('Failed to fetch master event recurrence: $e');
-    }
+    } catch (_) {}
     return 'none';
   }
 
   static String _repeatTypeFromRecurrence(Map<String, dynamic>? recurrence) {
-    logd("Determining repeat type from recurrence: $recurrence");
     if (recurrence == null) return 'none';
     final type = recurrence['pattern']?['type'] as String?;
     switch (type?.toLowerCase()) {

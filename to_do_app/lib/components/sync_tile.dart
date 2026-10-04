@@ -2,6 +2,7 @@ import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
 import 'package:to_do_app/models/calendar_event.dart';
 import 'package:to_do_app/models/settings.dart';
+import 'package:to_do_app/themes/app_colors.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -27,23 +28,12 @@ class SyncTile extends StatelessWidget {
     return _defaultColor;
   }
 
-  Widget _providerIcon(String source, Color accent) {
+  String _providerName(String source) {
     final s = source.toLowerCase();
-    if (s.contains('google')) {
-      return Image.asset(
-        'assets/images/google/icons8-google-calendar-48-2.png',
-        width: 18,
-        height: 18,
-      );
-    }
-    if (s.contains('outlook')) {
-      return Image.asset(
-        'assets/images/outlook/icons8-microsoft-outlook-2025-48-2.png',
-        width: 18,
-        height: 18,
-      );
-    }
-    return Icon(Icons.calendar_today_rounded, size: 18, color: accent);
+    if (s.contains('google')) return 'Google Calendar';
+    if (s.contains('outlook')) return 'Outlook Calendar';
+    if (s.contains('local')) return 'Device Calendar';
+    return 'Calendar';
   }
 
   String _formatTime(String? date, String? time) {
@@ -78,112 +68,62 @@ class SyncTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final muted = context.appColors.muted;
     final String name = task.name;
     final String source = task.source;
     final String timeStr = _formatTime(task.dueDate, task.dueTime);
     final Color accent = _accentColor(source);
+    final String subtitle =
+        timeStr.isEmpty
+            ? _providerName(source)
+            : '$timeStr · ${_providerName(source)}';
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: _openCalendarEvent,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(15),
         child: Ink(
+          padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
           decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: colorScheme.outlineVariant),
+            color: colorScheme.secondary,
+            borderRadius: BorderRadius.circular(15),
           ),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Left accent bar
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Container(
-                    width: 4,
-                    decoration: BoxDecoration(
-                      color: accent,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(16),
-                        bottomLeft: Radius.circular(16),
+          child: Row(
+            children: [
+              // Calendar colour bar
+              Container(
+                width: 4,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: colorScheme.onSurface,
                       ),
                     ),
-                  ),
-                ),
-                // Content
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(fontSize: 12, color: muted),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Provider icon badge
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(7),
-                          ),
-                          child: Center(child: _providerIcon(source, accent)),
-                        ),
-                        const SizedBox(width: 10),
-                        // Name (flexible, can wrap) + time pinned to right
-                        Expanded(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  name,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: colorScheme.onSurface,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (timeStr.isNotEmpty) ...[
-                                const SizedBox(width: 6),
-                                Icon(
-                                  Icons.schedule_outlined,
-                                  size: 11,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  timeStr,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        // Trailing open-in-calendar hint
-                        Icon(
-                          Icons.open_in_new_rounded,
-                          size: 14,
-                          color: colorScheme.onSurfaceVariant.withValues(
-                            alpha: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

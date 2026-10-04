@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -42,7 +41,6 @@ Future<void> initLocalTimeZone() async {
     );
     if (manual != null) {
       tz.setLocalLocation(manual);
-      if (kDebugMode) print("Using manually-set timezone: ${tz.local.name}");
       return;
     }
     // Unrecognized label (e.g. corrupted data) — fall through to auto-detect.
@@ -54,9 +52,7 @@ Future<void> initLocalTimeZone() async {
     tz.setLocalLocation(location);
     db.settings = db.settings.copyWith(timeZoneLabel: tzName);
     db.saveSettings();
-    if (kDebugMode) print("Local timezone set: ${tz.local.name}");
   } catch (e) {
-    if (kDebugMode) print("Failed to detect timezone: $e");
     tz.setLocalLocation(tz.getLocation('UTC'));
   }
 }
@@ -93,21 +89,19 @@ void main() async {
     isGoogleSignedIn: GoogleAuthService.currentUser != null,
     isOutlookSignedIn: OutlookAuthService.accessToken != null,
     displayName: GoogleAuthService.currentUser?.displayName ?? '',
+    email: GoogleAuthService.currentUser?.email ?? '',
+    photoUrl: GoogleAuthService.currentUser?.photoUrl ?? '',
   );
 
   try {
     await NotificationService.init();
-  } catch (e) {
-    if (kDebugMode) print("Notification init error: $e");
-  }
+  } catch (_) {}
 
   await initLocalTimeZone();
 
   try {
     await NotificationService.scheduleDailySummaryNotifications(db);
-  } catch (e) {
-    if (kDebugMode) print("Daily summary notification scheduling error: $e");
-  }
+  } catch (_) {}
 
   runApp(
     MultiProvider(

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:to_do_app/models/calendar_event.dart';
@@ -164,7 +163,6 @@ class ToDoDataBase {
   }
 
   Future<void> saveLocalCalTasks() {
-    if (kDebugMode) print('💾 saveLocalCalTasks: ${localCalTasks.length} rows');
     return _replaceCalBox(_localCalBox, localCalTasks);
   }
 
@@ -194,25 +192,21 @@ class ToDoDataBase {
   Future<void> clearToDoList() async {
     toDoList = [];
     await _tasksBox.clear();
-    if (kDebugMode) print('🧹 Cleared toDoList');
   }
 
   Future<void> clearLocalCalTasks() async {
     localCalTasks = [];
     await _localCalBox.clear();
-    if (kDebugMode) print('🧹 Cleared localCalTasks');
   }
 
   Future<void> clearGoogleCalTasks() async {
     googleCalTasks = [];
     await _googleCalBox.clear();
-    if (kDebugMode) print('🧹 Cleared googleCalTasks');
   }
 
   Future<void> clearOutlookCalTasks() async {
     outlookCalTasks = [];
     await _outlookCalBox.clear();
-    if (kDebugMode) print('🧹 Cleared outlookCalTasks');
   }
 
   Future<void> clearAllCalTasks() async {
@@ -231,7 +225,6 @@ class ToDoDataBase {
   void loadToDoList() => toDoList = _readTaskBox(_tasksBox);
   void loadLocalCalTasks() {
     localCalTasks = _readCalBox(_localCalBox);
-    if (kDebugMode) print('📂 loadLocalCalTasks  ${localCalTasks}');
   }
 
   void loadGoogleCalTasks() => googleCalTasks = _readCalBox(_googleCalBox);
@@ -284,13 +277,6 @@ class ToDoDataBase {
     loadSettings();
     loadSyncToCalendars();
     loadViewOnlyCalendars();
-    if (kDebugMode) {
-      print(
-        '🗄️ Database loaded: ${toDoList.length} tasks, '
-        '${localCalTasks.length}/${googleCalTasks.length}/'
-        '${outlookCalTasks.length} cal events',
-      );
-    }
   }
 
   Future<void> updateDataBase() async {
@@ -303,7 +289,6 @@ class ToDoDataBase {
     saveSettings();
     saveSyncToCalendars();
     saveViewOnlyCalendars();
-    if (kDebugMode) print('🗄️ Database updated');
   }
 
   // ─── Migration ──────────────────────────────────────────────────────────
@@ -314,9 +299,6 @@ class ToDoDataBase {
       if (stored < 2) _migrateLegacyMyBox();
       // v2 → v3 work was done in openBoxes() (cal boxes were deleted there).
       _metaBox.put('schemaVersion', kCurrentSchemaVersion);
-      if (kDebugMode) {
-        print('🗄️ Migrated database $stored → $kCurrentSchemaVersion');
-      }
     }
   }
 

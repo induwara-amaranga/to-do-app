@@ -2,11 +2,11 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:lottie/lottie.dart';
-import 'package:timezone/timezone.dart' as tz;
 import 'package:to_do_app/components/create_task_sheet.dart';
 import 'package:to_do_app/models/settings.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
-import 'package:to_do_app/utils/log.dart';
+
+import 'package:to_do_app/themes/app_colors.dart';
 
 class TaskTile extends StatefulWidget {
   final int index;
@@ -88,7 +88,10 @@ class _TaskTileState extends State<TaskTile> {
     setState(() => _showStars = true);
     Future.delayed(
       Duration(seconds: 1),
-      () => setState(() => _showStars = false),
+      // The lazily-built list may dispose this tile within that second.
+      () {
+        if (mounted) setState(() => _showStars = false);
+      },
     );
   }
 
@@ -96,20 +99,21 @@ class _TaskTileState extends State<TaskTile> {
   void initState() {
     super.initState();
     _completed = widget.taskCompleted;
-    logd("task tile zone : ${tz.local.name}");
+  }
+
+  @override
+  void didUpdateWidget(covariant TaskTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Tiles are keyed by task identity now, so the same State can outlive a
+    // completion toggle made elsewhere (e.g. undo). Re-sync from the task.
+    if (oldWidget.taskCompleted != widget.taskCompleted) {
+      _completed = widget.taskCompleted;
+      _removeTile = false;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // DateTime dueDate=DateTimeUtilsHelper.parseDate(widget.dueDate);
-
-    final combinedTime = DateTimeUtilsHelper.combineDateAndTime(
-      widget.dueDate,
-      widget.dueTime,
-    );
-    final localTime = DateTimeUtilsHelper.toLocalUsingTz(combinedTime);
-    // Runs once per visible tile per frame — keep it out of release builds.
-    logd("$combinedTime local zone $localTime");
     return Center(
       child: AnimatedSize(
         //alignment: Alignment.topCenter,
@@ -152,12 +156,8 @@ class _TaskTileState extends State<TaskTile> {
               borderRadius: BorderRadius.circular(15),
               child: ExpansionTile(
                 initiallyExpanded: _isExpanded,
-                onExpansionChanged: (expanded) {
-                  debugPrint(
-                    'Tile ${widget.index} expansion changed: $expanded',
-                  );
-                  setState(() => _isExpanded = expanded);
-                },
+                onExpansionChanged:
+                    (expanded) => setState(() => _isExpanded = expanded),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15),
                 ),
@@ -189,6 +189,13 @@ class _TaskTileState extends State<TaskTile> {
                           },
                           child: Checkbox(
                             value: _completed,
+                            side: BorderSide(
+                              color: context.appColors.muted,
+                              width: 2,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(3),
+                            ),
                             onChanged: (value) async {
                               if (value == true) {
                                 widget.disableCompleted.call();
@@ -268,11 +275,7 @@ class _TaskTileState extends State<TaskTile> {
                         ),
                       ),
                     ),
-                    if (widget.isStarred)
-                      Icon(
-                        Icons.star,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
+                    if (widget.isStarred) Icon(Icons.star, color: kAccent),
                     PopupMenuButton<String>(
                       borderRadius: BorderRadius.circular(20),
                       icon: const Icon(Icons.more_vert),
@@ -294,116 +297,118 @@ class _TaskTileState extends State<TaskTile> {
                     ),
                   ],
                 ),
+                // The details (timezone conversion + two date formats) are
+                // only computed when the tile is actually expanded, not on
+                // every build of every collapsed tile in the list.
                 children: [
-                  GestureDetector(
-                    onTap:
-                        () => showModalBottomSheet(
-                          isScrollControlled: true,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(20),
-                            ),
-                          ),
-                          backgroundColor: Colors.transparent,
-                          context: context,
-                          builder:
-                              (context) => CreateTaskSheet(
-                                isStarred: widget.isStarred,
-                                taskName: widget.taskName,
-                                taskNote: widget.taskNote,
-                                initialSubtasks: widget.initialSubtasks ?? [],
-                                buttonText: "Save changes",
-
-                                initialCategory: widget.taskCategory,
-                                initialPriority: widget.taskPriority,
-                                initialRepeatType: widget.repeatType,
-                                initialRemainderAmount: widget.remainderAmount,
-                                initialRemainderType: widget.remainderType,
-                                initialDueDate: widget.dueDate,
-                                initialDueTime: widget.dueTime,
-
-                                onSave: (taskDetails) {
-                                  if (widget.onEdit != null) {
-                                    widget.onEdit!(widget.index, taskDetails);
-                                  }
-                                },
-                                repeatTypes: widget.repeatTypes,
-                                priorityTypes: widget.priorityTypes,
-                                remainderTypes: widget.remainderTypes,
-                                categoryTypes: widget.categoryTypes,
-                              ),
-                        ),
-                    child: Column(
-                      children: [
-                        const Divider(),
-                        Text(
-                          "Source : ${widget.source}",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        if (widget.taskNote.isNotEmpty)
-                          ListTile(
-                            leading: const Icon(Icons.note_outlined),
-                            title: Text(widget.taskNote),
-                          ),
-                        if (widget.dueDate != null)
-                          ListTile(
-                            leading: const Icon(Icons.calendar_today),
-                            title: Text(
-                              "Due Date: ${DateTimeUtilsHelper.displayDateNumeric(localTime, widget.settings)}",
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          ),
-                        if (widget.dueTime != null)
-                          ListTile(
-                            leading: const Icon(Icons.access_time),
-                            title: Text(
-                              "Due Time: ${DateTimeUtilsHelper.displayTime(localTime, widget.settings)}",
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          ),
-                        ListTile(
-                          leading: const Icon(Icons.flag),
-                          title: Text(
-                            "Priority: ${widget.taskPriority}",
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.category),
-                          title: Text(
-                            "Category: ${widget.taskCategory}",
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.repeat),
-                          title: Text(
-                            "Repeat: ${widget.repeatType}",
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  Builder(builder: (context) => _buildDetails(context)),
                 ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildDetails(BuildContext context) {
+    final localTime = DateTimeUtilsHelper.toLocalUsingTz(
+      DateTimeUtilsHelper.combineDateAndTime(widget.dueDate, widget.dueTime),
+    );
+    return GestureDetector(
+      onTap:
+          () => showModalBottomSheet(
+            isScrollControlled: true,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            backgroundColor: Colors.transparent,
+            context: context,
+            builder:
+                (context) => CreateTaskSheet(
+                  isStarred: widget.isStarred,
+                  taskName: widget.taskName,
+                  taskNote: widget.taskNote,
+                  initialSubtasks: widget.initialSubtasks ?? [],
+                  buttonText: "Save changes",
+
+                  initialCategory: widget.taskCategory,
+                  initialPriority: widget.taskPriority,
+                  initialRepeatType: widget.repeatType,
+                  initialRemainderAmount: widget.remainderAmount,
+                  initialRemainderType: widget.remainderType,
+                  initialDueDate: widget.dueDate,
+                  initialDueTime: widget.dueTime,
+
+                  onSave: (taskDetails) {
+                    if (widget.onEdit != null) {
+                      widget.onEdit!(widget.index, taskDetails);
+                    }
+                  },
+                  repeatTypes: widget.repeatTypes,
+                  priorityTypes: widget.priorityTypes,
+                  remainderTypes: widget.remainderTypes,
+                  categoryTypes: widget.categoryTypes,
+                ),
+          ),
+      child: Column(
+        children: [
+          const Divider(),
+          Text(
+            "Source : ${widget.source}",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          if (widget.taskNote.isNotEmpty)
+            ListTile(
+              leading: const Icon(Icons.note_outlined),
+              title: Text(widget.taskNote),
+            ),
+          if (widget.dueDate != null)
+            ListTile(
+              leading: const Icon(Icons.calendar_today),
+              title: Text(
+                "Due Date: ${DateTimeUtilsHelper.displayDateNumeric(localTime, widget.settings)}",
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
+          if (widget.dueTime != null)
+            ListTile(
+              leading: const Icon(Icons.access_time),
+              title: Text(
+                "Due Time: ${DateTimeUtilsHelper.displayTime(localTime, widget.settings)}",
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
+          ListTile(
+            leading: const Icon(Icons.flag),
+            title: Text(
+              "Priority: ${widget.taskPriority}",
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.category),
+            title: Text(
+              "Category: ${widget.taskCategory}",
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.repeat),
+            title: Text(
+              "Repeat: ${widget.repeatType}",
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 import 'package:to_do_app/services/AiTaskService.dart';
+import 'package:to_do_app/themes/app_colors.dart';
 
 class AiGenerationButton extends StatefulWidget {
   final BuildContext context;
@@ -32,8 +33,6 @@ class _AiGenerationButtonState extends State<AiGenerationButton> {
         goal: widget.goal.text,
         timeframe: widget.timeframe,
       ).then((response) {
-        print('✅ Response: $response');
-
         if (widget.onResult != null) {
           widget.onResult!(response);
         }
@@ -50,7 +49,6 @@ class _AiGenerationButtonState extends State<AiGenerationButton> {
         isLoading = false;
       });
 
-      print('⚠️ Error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('⚠️ Error occurred.Check network connection.'),
@@ -70,29 +68,34 @@ class _AiGenerationButtonState extends State<AiGenerationButton> {
                 callApi(context);
                 setState(() {});
               },
-
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child:
-            isLoading
-                ? Padding(
-                  padding: const EdgeInsets.all(1.0),
-                  child: SizedBox(
-                    width: 30,
-                    height: 30,
+      child: Container(
+        width: 56,
+        height: 56,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: context.appColors.accentSoft,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          child:
+              isLoading
+                  ? const SizedBox(
+                    key: ValueKey('ai_loading'),
+                    width: 24,
+                    height: 24,
                     child: CircularProgressIndicator(
                       strokeWidth: 3,
-                      color: Theme.of(context).colorScheme.primary,
+                      color: kAccent,
                     ),
+                  )
+                  : const Icon(
+                    Icons.auto_awesome,
+                    key: ValueKey('ai_icon'),
+                    size: 26,
+                    color: kAccent,
                   ),
-                )
-                : Image.asset(
-                  'assets/images/ai.png',
-                  key: const ValueKey('ai_image'),
-                  width: 40,
-                  height: 40,
-                  fit: BoxFit.cover,
-                ),
+        ),
       ),
     );
   }

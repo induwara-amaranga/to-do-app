@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as gcal;
-import 'package:to_do_app/utils/log.dart';
 
 import 'package:http/http.dart' as http;
 //import 'package:supabase_flutter/supabase_flutter.dart';
@@ -31,7 +30,6 @@ class GoogleCalendarService {
 
   // /// Signs in with Google → authenticates Supabase → returns Calendar API client
   // static Future<gcal.CalendarApi?> initializeSignIn() async {
-  //   logd("🔄 Initializing Google Sign-In...");
 
   //   final GoogleSignIn signIn = GoogleSignIn.instance;
 
@@ -46,7 +44,6 @@ class GoogleCalendarService {
   //   );
 
   //   if (googleAccount == null) {
-  //     logd('❌ Sign-in cancelled by user.');
   //     return null;
   //   }
 
@@ -61,7 +58,6 @@ class GoogleCalendarService {
   //   final accessToken = googleAuthorization.accessToken;
 
   //   if (idToken == null || accessToken == null) {
-  //     logd('❌ Missing tokens.');
   //     return null;
   //   }
 
@@ -72,13 +68,9 @@ class GoogleCalendarService {
   //     accessToken: accessToken,
   //   );
 
-  //   logd('✅ Signed in to Supabase successfully as ${googleAccount.email}');
-  //   logd('🔑 Access Token: $accessToken');
-
   //   // 📆 Initialize Google Calendar API
   //   final calendarApi = await _getCalendarApi(accessToken);
 
-  //   logd('✅ Google Calendar API ready');
   //   return calendarApi;
   // }
 
@@ -100,12 +92,10 @@ class GoogleCalendarService {
   // }
 
   // static Future<bool> restoreLastSession() async {
-  //   logd("🔄 Trying to restore previous Google session...");
 
   //   String? auth = await storage.read(key: 'google_cal_headers');
 
   //   if (auth == null) {
-  //     logd("❌ No stored token. User must sign in once.");
   //     return false;
   //   }
   //   Map<String, dynamic> header = jsonDecode(auth);
@@ -120,16 +110,13 @@ class GoogleCalendarService {
   //     // test token
   //     //await _driveApi!.files.list(pageSize: 1);
 
-  //     logd("✅ Restored calendar session without sign-in!");
   //     return true;
   //   } catch (e) {
-  //     logd("❌ Saved token expired: $e");
   //     return false;
   //   }
   // }
 
   // static Future<Map<String, dynamic>?> initializeSignIn() async {
-  //   logd("initializing google sign in...");
 
   //   // 1️⃣ Initialize GoogleSignIn
   //   await GoogleSignIn.instance.initialize(
@@ -140,13 +127,10 @@ class GoogleCalendarService {
   //   GoogleSignInAccount? account;
 
   //   // 2️⃣ Attempt SILENT sign-in first
-  //   logd("Trying silent sign-in...");
   //   account = await GoogleSignIn.instance.attemptLightweightAuthentication();
 
   //   if (account != null) {
-  //     logd("✅ Silent sign-in success: ${account.email}");
   //   } else {
-  //     logd("❌ Silent sign-in failed, asking user to sign in...");
   //     // 3️⃣ Fallback to UI sign-in
   //     account = await GoogleSignIn.instance.authenticate(
   //       scopeHint: ['https://www.googleapis.com/auth/calendar'],
@@ -154,7 +138,6 @@ class GoogleCalendarService {
   //   }
 
   //   // 4️⃣ Now request OAuth headers (tokens)
-  //   logd("Requesting OAuth headers...");
   //   var headers = await account.authorizationClient.authorizationHeaders(
   //     ['https://www.googleapis.com/auth/calendar'],
   //     promptIfNecessary: false, // silent permission request
@@ -162,7 +145,6 @@ class GoogleCalendarService {
 
   //   // 5️⃣ If tokens are null, ask for permission with popup
   //   if (headers == null) {
-  //     logd("Silent header generation failed — requesting user consent...");
   //     headers = await account.authorizationClient.authorizationHeaders([
   //       'https://www.googleapis.com/auth/calendar',
   //     ], promptIfNecessary: true);
@@ -170,16 +152,12 @@ class GoogleCalendarService {
 
   //   // 6️⃣ If STILL no headers → fail
   //   if (headers == null) {
-  //     logd("❌ Failed to obtain OAuth headers");
   //     return null;
   //   }
   //   await storage.write(key: 'google_cal_headers', value: jsonEncode(headers));
 
-  //   logd('🔑 Access token: ${headers['Authorization']}');
-
   //   // 7️⃣ Build Calendar API
   //   final gcal.CalendarApi calendarApi = await getCalendarApi(headers);
-  //   logd('✅ Google Calendar API initialized');
 
   //   _calendarApi = calendarApi;
   //   _account = account;
@@ -263,18 +241,16 @@ class GoogleCalendarService {
           recurrence: _buildRecurrenceRule(task.repeatType),
         );
         try {
-          final result = await _calendarApi!.events.patch(
+          await _calendarApi!.events.patch(
             event,
             calendarId,
             knownEventId,
             sendUpdates: "all", // "none", "externalOnly", "all"
           );
-          logd('✅ editted event: ${result.summary}');
           return;
         } catch (e) {
           // The event was deleted or moved calendars on the remote side —
           // drop the stale link and fall through to inserting a fresh one.
-          logd('⚠️ patch of $knownEventId failed ($e); re-inserting');
           task.remoteEventIds[1] = "";
         }
       }
@@ -288,12 +264,8 @@ class GoogleCalendarService {
       );
 
       final created = await _calendarApi!.events.insert(event, calendarId);
-      logd('google==========>✅ inserted event: ${created.summary}');
       task.remoteEventIds[1] = created.id;
-    } catch (e, st) {
-      logd('❌ Error adding/updating Google event: $e');
-      logd(st);
-    }
+    } catch (_) {}
   }
 
   /// Delete a Google Calendar event
@@ -301,10 +273,7 @@ class GoogleCalendarService {
     _requireInit();
     try {
       await _calendarApi!.events.delete(calendarId, eventId);
-      logd('🗑️ Deleted event: $eventId');
-    } catch (e) {
-      logd('❌ Error deleting Google event: $e');
-    }
+    } catch (_) {}
   }
 
   /// Import events from Google Calendar into google DB
@@ -312,17 +281,13 @@ class GoogleCalendarService {
     String calendarId,
     ToDoDataBase db,
   ) async {
-    int updatedCount = 0;
-    int importedCount = 0;
     _requireInit();
     final events = await getEvents(calendarId);
-    logd('🔁 Importing ${events.length} Google events');
 
     for (final e in events) {
       if (e.start?.dateTime == null) continue;
 
       final start = e.start!.dateTime ?? e.start!.date?.toUtc();
-      //logd("==========$start");
       final dueDate = start!.toIso8601String().split('T')[0];
       final dueTime = start.toIso8601String().split('T')[1].split('.')[0];
 
@@ -342,7 +307,6 @@ class GoogleCalendarService {
         t.reminderType = 'none';
         t.isStarred = false;
         t.subtasks = [];
-        updatedCount++;
         continue;
       }
 
@@ -370,14 +334,9 @@ class GoogleCalendarService {
           notificationIds: [],
         ),
       );
-
-      importedCount++;
     }
 
     await db.updateDataBase();
-    logd(
-      '✅ Imported $importedCount events into google DB.updated $updatedCount events.',
-    );
   }
 
   /// Import a list of view-only events into the google DB
@@ -385,14 +344,9 @@ class GoogleCalendarService {
     List<dynamic>? events,
     ToDoDataBase db,
   ) async {
-    logd('----------------- Importing view-only events -----------------');
     if (events == null || events.isEmpty) {
-      logd('No events to import.');
       return;
     }
-
-    int importedCount = 0;
-    int updatedCount = 0;
 
     for (final event in events) {
       if (event.start == null) continue;
@@ -452,11 +406,8 @@ class GoogleCalendarService {
         t.reminderType = taskDetails['remainderType'] as String;
         t.isStarred = taskDetails['isStarred'] as bool;
         t.subtasks = [];
-        updatedCount++;
-        logd('✏️ Updated existing task: ${event.summary}');
         continue;
       }
-      logd("existing = $existingIndex");
 
       // Add new task
       db.googleCalTasks.add(
@@ -482,16 +433,9 @@ class GoogleCalendarService {
           completedAt: "none",
         ),
       );
-
-      importedCount++;
-      logd('➕ Added new task: ${event.summary}');
     }
 
     await db.updateDataBase();
-
-    logd(
-      '✅ Imported $importedCount new events, updated $updatedCount existing ones.',
-    );
   }
 
   // /// Sync google tasks → Google Calendar
@@ -505,7 +449,6 @@ class GoogleCalendarService {
   //     await addOrUpdateEvent(calendarId, task);
   //     count++;
   //   }
-  //   logd('📤 Synced $count tasks to Google Calendar');
   // }
 
   /// Helper to ensure initialization
@@ -535,7 +478,6 @@ class GoogleCalendarService {
       //existing=calendarFromListEntry
 
       if (existing.id != null) {
-        logd('✅ Calendar "ToDoList" already exists');
         return calendarFromListEntry(existing);
       }
 
@@ -546,7 +488,6 @@ class GoogleCalendarService {
             ..timeZone = 'UTC'; // adjust timezone if needed
 
       final createdCalendar = await _calendarApi!.calendars.insert(newCalendar);
-      logd('✅ Created new calendar: ${createdCalendar.summary}');
 
       // 4️⃣ Optionally add it to calendar list (so it shows up in UI)
       await _calendarApi!.calendarList.insert(
@@ -558,9 +499,7 @@ class GoogleCalendarService {
         summary: createdCalendar.summary,
         timeZone: createdCalendar.timeZone,
       );
-    } catch (e, st) {
-      logd('❌ Error creating/getting calendar: $e');
-      logd(st);
+    } catch (_) {
       return null;
     }
   }
@@ -577,32 +516,23 @@ class GoogleCalendarService {
     ToDoDataBase db,
     String calendarID,
   ) async {
-    logd("Sync to ------------------------------------------------");
-    int count = 0;
     //final calendar = await ensureToDoListCalendar();
     final tasksToSync = List<Task>.from(db.toDoList);
     for (var task in tasksToSync) {
       if (task.source == "repeat") continue;
       try {
         await addOrUpdateEvent(calendarID, task);
-        count++;
-      } catch (e) {
-        logd('❌ Failed to sync ${calendarID} "${task.name}".');
-      }
+      } catch (_) {}
     }
-    logd("📅 $count tasks added/updated to google calendar");
   }
 
   static Future<void> syncTasksFromCalendars(ToDoDataBase db) async {
-    logd("sync from------------------------------");
     final calID = db.syncToCalendars["google"];
     //db.googleCalTasks.removeWhere((t) => t[14] == calID);
     List<dynamic> events = await getEvents(calID);
     try {
       await importViewOnlyEventsToDB(events, db);
-    } catch (e) {
-      logd("Sync from error $e");
-    }
+    } catch (_) {}
   }
 
   static List<String>? _buildRecurrenceRule(String? repeatType) {

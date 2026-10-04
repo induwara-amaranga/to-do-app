@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:to_do_app/components/bar_chart.dart';
-import 'package:to_do_app/components/pie_chart.dart';
 import 'package:to_do_app/components/task_page_bottom_nav_bar.dart';
 import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/models/task.dart';
+import 'package:to_do_app/themes/app_colors.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 
 class StatisticsPage extends StatefulWidget {
@@ -89,14 +89,19 @@ class _StatisticsPageState extends State<StatisticsPage> {
       groupedWeekByCompletedDate[day.weekday] = [];
     }
 
+    // Parse the 7 week days once, not once per completed-task entry.
+    final weekDays = {
+      for (final d in selectedWeek)
+        () {
+          final day = DateTimeUtilsHelper.parseDateTime(d);
+          return DateTime(day.year, day.month, day.day);
+        }(),
+    };
     for (var entry in groupedByCompletedDate.entries) {
       final DateTime completed = DateTimeUtilsHelper.parseDateTime(entry.key);
-      if (selectedWeek.any((d) {
-        final DateTime day = DateTimeUtilsHelper.parseDateTime(d);
-        return day.year == completed.year &&
-            day.month == completed.month &&
-            day.day == completed.day;
-      })) {
+      if (weekDays.contains(
+        DateTime(completed.year, completed.month, completed.day),
+      )) {
         if (groupedWeekByCompletedDate.containsKey(completed.weekday)) {
           groupedWeekByCompletedDate[completed.weekday]!.addAll(entry.value);
         } else {
@@ -157,31 +162,24 @@ class _StatisticsPageState extends State<StatisticsPage> {
     };
 
     toDoList = widget.db.toDoList;
-    missedTasks =
-        toDoList.where((task) {
-          DateTime? dueDateTimeUtc = _getUtcDateTime(task);
-          if (dueDateTimeUtc == null) return false;
-          return dueDateTimeUtc.isBefore(today) && task.completed == false;
-        }).toList();
-    pastTasks =
-        toDoList.where((task) {
-          DateTime? dueDateTimeUtc = _getUtcDateTime(task);
-          if (dueDateTimeUtc == null) return false;
-          return dueDateTimeUtc.isBefore(today);
-        }).toList();
-    pendingTasks =
-        toDoList.where((task) {
-          final dueDateTimeUtc = _getUtcDateTime(task);
-          if (dueDateTimeUtc == null) return false;
-          return !dueDateTimeUtc.isBefore(today) && task.completed == false;
-        }).toList();
-    completedTasks = toDoList.where((task) => task.completed == true).toList();
-    completedPastTasks =
-        completedTasks.where((task) {
-          final dueDateTimeUtc = _getUtcDateTime(task);
-          if (dueDateTimeUtc == null) return false;
-          return dueDateTimeUtc.isBefore(today) && task.completed == true;
-        }).toList();
+    // One pass, deriving each task's due date once — this used to be four
+    // separate filters over the whole list, each re-parsing every due date.
+    missedTasks = [];
+    pastTasks = [];
+    pendingTasks = [];
+    completedTasks = [];
+    completedPastTasks = [];
+    for (final task in toDoList) {
+      if (task.completed) completedTasks.add(task);
+      final DateTime? dueDateTimeUtc = _getUtcDateTime(task);
+      if (dueDateTimeUtc == null) continue;
+      if (dueDateTimeUtc.isBefore(today)) {
+        pastTasks.add(task);
+        (task.completed ? completedPastTasks : missedTasks).add(task);
+      } else if (!task.completed) {
+        pendingTasks.add(task);
+      }
+    }
 
     for (var task in pendingTasks) {
       String priority = task.priority;
@@ -227,24 +225,21 @@ class _StatisticsPageState extends State<StatisticsPage> {
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: _buildAppBar(),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.only(
-          top: 24,
-          left: 16,
-          right: 16,
-          bottom: 96,
-        ),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildCircularProgressSection(),
-            const SizedBox(height: 24),
-            _buildTaskSummaryCards(),
-            const SizedBox(height: 24),
-            _buildWeeklyProgressChart(),
-            const SizedBox(height: 24),
-            _buildCategoryDistribution(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             _buildPerformanceInsightCard(),
+            const SizedBox(height: 16),
+            _buildTaskSummaryCards(),
+            const SizedBox(height: 16),
+            _buildPriorityDistribution(),
+            const SizedBox(height: 16),
+            _buildWeeklyProgressChart(),
+            const SizedBox(height: 16),
+            _buildCategoryDistribution(),
           ],
         ),
       ),
@@ -254,39 +249,86 @@ class _StatisticsPageState extends State<StatisticsPage> {
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
-      shadowColor: Colors.black.withOpacity(0.05),
-      shape: const Border(
-        bottom: BorderSide(color: Color(0xFFF1F5F9), width: 1),
+      centerTitle: true,
+      title: const Text(
+        'Productivity',
+        style: TextStyle(
+          fontFamily: 'Manrope',
+          fontWeight: FontWeight.w800,
+          fontSize: 20,
+          color: kAccent,
+        ),
       ),
-      title: Row(
+    );
+  }
+
+  // ── Shared pieces ─────────────────────────────────────────────────────────
+
+  Widget _card({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.secondary,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: child,
+    );
+  }
+
+  TextStyle get _heading => TextStyle(
+    fontFamily: 'Manrope',
+    fontSize: 16,
+    fontWeight: FontWeight.bold,
+    color: Theme.of(context).colorScheme.onSurface,
+  );
+
+  TextStyle get _mutedText =>
+      TextStyle(fontSize: 14, color: context.appColors.muted);
+
+  /// One labelled horizontal bar: label, proportional track, count.
+  Widget _barRow(String label, int count, int max, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: const BoxDecoration(shape: BoxShape.circle),
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.bolt,
-              color: Theme.of(context).colorScheme.primary,
+          SizedBox(
+            width: 70,
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13),
             ),
           ),
-          const SizedBox(width: 8),
-          Text(
-            'Productivity',
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontWeight: FontWeight.w900,
-              fontSize: 20,
-              letterSpacing: -0.4,
-              color: Theme.of(context).colorScheme.primary,
+          const SizedBox(width: 12),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: Stack(
+                children: [
+                  Container(height: 10, color: context.appColors.trackOff),
+                  FractionallySizedBox(
+                    widthFactor: max == 0 ? 0 : (count / max).clamp(0.0, 1.0),
+                    child: Container(height: 10, color: color),
+                  ),
+                ],
+              ),
             ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            '$count',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
           ),
         ],
       ),
     );
   }
+
+  // ── Sections ──────────────────────────────────────────────────────────────
 
   Widget _buildCircularProgressSection() {
     final double rate =
@@ -294,90 +336,71 @@ class _StatisticsPageState extends State<StatisticsPage> {
     final String percentText =
         pastTasks.isNotEmpty ? '${(rate * 100).round()}%' : 'N/A';
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return _card(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Stack(
-            alignment: Alignment.center,
+          Row(
             children: [
               SizedBox(
-                width: 192,
-                height: 192,
-                child: CircularProgressIndicator(
-                  value: rate,
-                  strokeWidth: 12,
-                  backgroundColor: Theme.of(
-                    context,
-                  ).colorScheme.primary.withOpacity(0.3),
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Theme.of(context).colorScheme.primary,
-                  ),
+                width: 112,
+                height: 112,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox.expand(
+                      child: CircularProgressIndicator(
+                        value: rate,
+                        strokeWidth: 10,
+                        backgroundColor: context.appColors.trackOff,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          kAccent,
+                        ),
+                      ),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          percentText,
+                          style: const TextStyle(
+                            fontFamily: 'Manrope',
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'COMPLETED',
+                          style: TextStyle(
+                            fontFamily: 'Manrope',
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: context.appColors.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    percentText,
-                    style: const TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0B1C30),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildStatChip(
+                      '${completedPastTasks.length}',
+                      'Completed In Past',
                     ),
-                  ),
-                  const Text(
-                    'COMPLETED',
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 12,
-                      letterSpacing: 1.6,
-                      color: Color(0xFF584237),
-                    ),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    _buildStatChip('${missedTasks.length}', 'Missed In Past'),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            _getMotivationText(),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 16,
-              color: Theme.of(context).colorScheme.onPrimary,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildStatChip(
-                '${completedPastTasks.length}',
-                'Completed In Past',
-              ),
-              const SizedBox(width: 24),
-              _buildStatChip('${missedTasks.length}', 'Missed In Past'),
-              //const SizedBox(width: 24),
-              //_buildStatChip('${pendingTasks.length}', 'Pending'),
-            ],
-          ),
+          const SizedBox(height: 14),
+          Text(_getMotivationText(), style: _mutedText),
         ],
       ),
     );
@@ -385,25 +408,40 @@ class _StatisticsPageState extends State<StatisticsPage> {
 
   Widget _buildStatChip(String count, String label) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           count,
           style: const TextStyle(
             fontFamily: 'Manrope',
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF0B1C30),
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
           ),
         ),
         Text(
           label,
-          style: const TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 11,
-            color: Color(0xFF584237),
-          ),
+          style: TextStyle(fontSize: 12, color: context.appColors.muted),
         ),
       ],
+    );
+  }
+
+  Widget _buildPerformanceInsightCard() {
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.insights, color: kAccent, size: 20),
+              const SizedBox(width: 8),
+              Text('Performance Insight', style: _heading),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(_getBestDayInsight(), style: _mutedText),
+        ],
+      ),
     );
   }
 
@@ -411,235 +449,137 @@ class _StatisticsPageState extends State<StatisticsPage> {
     return Row(
       children: [
         Expanded(
-          child: _buildTaskCard(
+          child: _buildSummaryCard(
             title: 'Missed Tasks',
-            count: missedTasks.length.toString(),
-            countColor: const Color(0xFFBA1A1A),
-            priorityMap: groupedMissedTasksByPriority,
+            count: missedTasks.length,
+            dot: context.appColors.priorityHigh,
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         Expanded(
-          child: _buildTaskCard(
+          child: _buildSummaryCard(
             title: 'Pending Tasks',
-            count: pendingTasks.length.toString(),
-            countColor: Theme.of(context).colorScheme.primary,
-            priorityMap: groupedPendingTasksByPriority,
+            count: pendingTasks.length,
+            dot: context.appColors.priorityMedium,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildTaskCard({
+  Widget _buildSummaryCard({
     required String title,
-    required String count,
-    required Color countColor,
-    required Map<String, List<Task>> priorityMap,
+    required int count,
+    required Color dot,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 14,
-                    color: Color(0xFF584237),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: context.appColors.muted,
                   ),
-                ),
-              ),
-              Text(
-                count,
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.32,
-                  color: countColor,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _buildPriorityItem(
-            'High',
-            priorityMap['High']?.length ?? 0,
-            const Color(0xFFFEE2E2),
-            const Color(0xFFBA1A1A),
-          ),
           const SizedBox(height: 6),
-          _buildPriorityItem(
-            'Medium',
-            priorityMap['Medium']?.length ?? 0,
-            const Color(0xFFFEF9C3),
-            const Color(0xFFA16207),
-          ),
-          const SizedBox(height: 6),
-          _buildPriorityItem(
-            'Low',
-            priorityMap['Low']?.length ?? 0,
-            const Color(0xFFDCFCE7),
-            const Color(0xFF166534),
+          Text(
+            '$count',
+            style: const TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 32,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPriorityItem(
-    String label,
-    int count,
-    Color badgeBg,
-    Color badgeTextColor,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildPriorityDistribution() {
+    final c = context.appColors;
+    final rows = <(String, Color)>[
+      ('High', c.priorityHigh),
+      ('Medium', c.priorityMedium),
+      ('Low', c.priorityLow),
+    ];
+    int countOf(String p) => groupedPendingTasksByPriority[p]?.length ?? 0;
+    final int max = rows
+        .map((r) => countOf(r.$1))
+        .fold(0, (a, b) => a > b ? a : b);
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 13,
-              color: Color(0xFF0B1C30),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: badgeBg,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              '$count',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: badgeTextColor,
-              ),
-            ),
-          ),
+          Text('Pending by Priority', style: _heading),
+          for (final r in rows) _barRow(r.$1, countOf(r.$1), max, r.$2),
         ],
       ),
     );
   }
 
   Widget _buildWeeklyProgressChart() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    final muted = context.appColors.muted;
+    return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              const Text(
-                'Weekly Progress',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 16,
-                  color: Color(0xFF0B1C30),
-                  fontWeight: FontWeight.bold,
+              Expanded(child: Text('Weekly Progress', style: _heading)),
+              IconButton(
+                onPressed: () {
+                  setState(() {
+                    groupedWeekByCompletedDate = {};
+                    displayWeek++;
+                    createWeekMap();
+                  });
+                },
+                icon: Icon(Icons.chevron_left, color: muted),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  '${DateTimeUtilsHelper.displayDayMonth(firstDate, widget.db.settings)} – ${DateTimeUtilsHelper.displayDayMonth(lastDate, widget.db.settings)}',
+                  style: TextStyle(fontSize: 12, color: muted),
                 ),
               ),
-
-              //Spacer(),
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      setState(() {
-                        groupedWeekByCompletedDate = {};
-                        displayWeek++;
-                        createWeekMap();
-                      });
-                    },
-                    icon: const Icon(
-                      Icons.chevron_left,
-                      color: Color(0xFF584237),
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 1),
-                    child: Text(
-                      '${DateTimeUtilsHelper.displayDayMonth(firstDate, widget.db.settings)}-${DateTimeUtilsHelper.displayDayMonth(lastDate, widget.db.settings)}',
-                      style: const TextStyle(
-                        fontFamily: 'Manrope',
-                        fontSize: 12,
-                        color: Color(0xFF584237),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed:
-                        displayWeek > 0
-                            ? () {
-                              setState(() {
-                                groupedWeekByCompletedDate = {};
-                                displayWeek--;
-                                createWeekMap();
-                              });
-                            }
-                            : null,
-                    icon: Icon(
-                      Icons.chevron_right,
-                      color:
-                          displayWeek > 0
-                              ? const Color(0xFF584237)
-                              : Colors.grey.shade300,
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
+              IconButton(
+                onPressed:
+                    displayWeek > 0
+                        ? () {
+                          setState(() {
+                            groupedWeekByCompletedDate = {};
+                            displayWeek--;
+                            createWeekMap();
+                          });
+                        }
+                        : null,
+                icon: Icon(
+                  Icons.chevron_right,
+                  color: displayWeek > 0 ? muted : muted.withValues(alpha: 0.3),
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           SizedBox(
             height: 150,
             child: MyBarChart(
@@ -653,171 +593,27 @@ class _StatisticsPageState extends State<StatisticsPage> {
   }
 
   Widget _buildCategoryDistribution() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    final entries =
+        groupedPendingTasksByCategory.entries
+            .where((e) => e.value.isNotEmpty)
+            .toList()
+          ..sort((a, b) => b.value.length.compareTo(a.value.length));
+    final int max = entries.isEmpty ? 0 : entries.first.value.length;
+    return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Pending by Category',
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 16,
-              color: Color(0xFF0B1C30),
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 24),
-          pendingTasks.isEmpty
-              ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24.0),
-                  child: Text(
-                    'No pending tasks',
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 14,
-                      color: Color(0xFF584237),
-                    ),
-                  ),
-                ),
-              )
-              : SizedBox(
-                height: 200,
-                child: MyPieChart(
-                  color: Theme.of(context).colorScheme.primary,
-                  mappedPending: groupedPendingTasksByCategory,
-                  total: pendingTasks.length,
-                ),
-              ),
+          Text('Pending by Category', style: _heading),
+          if (entries.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: Text('No pending tasks', style: _mutedText)),
+            )
+          else
+            for (final e in entries)
+              _barRow(e.key, e.value.length, max, kAccent),
         ],
       ),
-    );
-  }
-
-  Widget _buildPerformanceInsightCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0B1C30),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 25,
-            offset: const Offset(0, 20),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                  border: Border.all(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withOpacity(0.3),
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.insights,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Performance Insight',
-                      style: TextStyle(
-                        fontFamily: 'Manrope',
-                        fontSize: 16,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _getBestDayInsight(),
-                      style: const TextStyle(
-                        fontFamily: 'Manrope',
-                        fontSize: 14,
-                        color: Color(0xFFCBD5E1),
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.only(top: 24),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: Color(0xFF334155))),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildInsightStat('${toDoList.length}', 'Total'),
-                _buildInsightStat('${completedTasks.length}', 'Done'),
-                _buildInsightStat('${missedTasks.length}', 'Missed'),
-                _buildInsightStat('${pendingTasks.length}', 'Pending'),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInsightStat(String count, String label) {
-    return Column(
-      children: [
-        Text(
-          count,
-          style: const TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 12,
-            color: Color(0xFF94A3B8),
-          ),
-        ),
-      ],
     );
   }
 }

@@ -43,8 +43,6 @@ class _SavedTimetablesPageState extends State<SavedTimetablesPage> {
         savedFiles.clear();
         savedFiles.addAll(files);
       });
-
-      print("Loaded ${files.length} saved timetable files.");
     });
   }
 
@@ -66,9 +64,6 @@ class _SavedTimetablesPageState extends State<SavedTimetablesPage> {
     );
     viewingFiles = FileSortService.sort(sorting, viewingFiles);
 
-    print(
-      "Building SavedTimetablesPage with ${viewingFiles} viewing files (query: '$query') from ${savedFiles.length} saved files.",
-    );
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -94,8 +89,6 @@ class _SavedTimetablesPageState extends State<SavedTimetablesPage> {
                         children: [Text("Sort by"), Icon(Icons.chevron_right)],
                       ),
                       onSelected: (subValue) {
-                        print("Selected sort: $subValue");
-
                         final sortingProvider =
                             context.read<FileSortProvider>();
 
@@ -155,8 +148,6 @@ class _SavedTimetablesPageState extends State<SavedTimetablesPage> {
                         children: [Text("View"), Icon(Icons.chevron_right)],
                       ),
                       onSelected: (subValue) {
-                        print("Selected view: $subValue");
-
                         final viewProvider = context.read<ViewProvider>();
                         //if(subValue=="view")
                         //viewProvider.setView("view");
@@ -226,9 +217,6 @@ class _SavedTimetablesPageState extends State<SavedTimetablesPage> {
               itemCount: viewingFiles.length,
               //shrinkWrap: true,
               itemBuilder: (context, index) {
-                print(
-                  "Building ListViewTimeTableTile for file: ${viewingFiles[index].path}",
-                );
                 return Padding(
                   padding: const EdgeInsets.all(8.0),
 
@@ -290,18 +278,11 @@ class _SavedTimetablesPageState extends State<SavedTimetablesPage> {
           pickedFiles: pickedFiles,
 
           onFIlesPicked: () async {
-            print("Saving ${pickedFiles.length} picked files...");
             for (File f in pickedFiles!) {
-              print("Picked file: ${f.path}");
               final filename = f.path.split('/').last;
               final Uint8List fileBytes = f.readAsBytesSync();
-              File saved = await FileStorageService.saveFile(
-                fileBytes,
-                filename,
-              );
-              if (saved != null) print("Saved file at: ${saved.path}");
+              await FileStorageService.saveFile(fileBytes, filename);
             }
-            print("All picked files saved.");
             setState(() {
               savedFiles.addAll(pickedFiles);
             });
@@ -316,12 +297,7 @@ class _SavedTimetablesPageState extends State<SavedTimetablesPage> {
   void checkSelectedFile(BuildContext context) async {
     final files = await showPickFileDialog(context);
     if (files != null) {
-      for (File f in files) {
-        print("Selected file: ${f.path}");
-      }
       // Save, preview, or open the file here
-    } else {
-      print("No file selected");
-    }
+    } else {}
   }
 }

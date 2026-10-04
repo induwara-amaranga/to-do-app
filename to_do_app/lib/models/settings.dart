@@ -2,6 +2,9 @@
 class AppSettings {
   final bool completionTone;
   final bool completionAnimation;
+  // Calendar-event lists on the Tasks and Calendar pages start collapsed
+  // once the user has collapsed them (remembered across launches).
+  final bool calendarEventsCollapsed;
   final String defaultCategory;
   final String language;
   final String reminderTime;
@@ -39,6 +42,7 @@ class AppSettings {
   const AppSettings({
     this.completionTone = true,
     this.completionAnimation = true,
+    this.calendarEventsCollapsed = false,
     this.defaultCategory = 'None',
     this.language = 'English',
     this.reminderTime = '0',
@@ -50,7 +54,7 @@ class AppSettings {
     this.lockScreenReminder = true,
     this.quickAddNotif = true,
     this.taskOverview = false,
-    this.morningPlan = true,
+    this.morningPlan = false,
     this.eveningReview = false,
     this.widgetStyle = 'Compact',
     this.widgetSize = 'Medium',
@@ -68,6 +72,7 @@ class AppSettings {
   AppSettings copyWith({
     bool? completionTone,
     bool? completionAnimation,
+    bool? calendarEventsCollapsed,
     String? defaultCategory,
     String? language,
     String? reminderTime,
@@ -96,6 +101,8 @@ class AppSettings {
     return AppSettings(
       completionTone: completionTone ?? this.completionTone,
       completionAnimation: completionAnimation ?? this.completionAnimation,
+      calendarEventsCollapsed:
+          calendarEventsCollapsed ?? this.calendarEventsCollapsed,
       defaultCategory: defaultCategory ?? this.defaultCategory,
       language: language ?? this.language,
       reminderTime: reminderTime ?? this.reminderTime,
@@ -128,6 +135,7 @@ class AppSettings {
   Map<String, dynamic> toMap() => {
     'completionTone': completionTone,
     'completionAnimation': completionAnimation,
+    'calendarEventsCollapsed': calendarEventsCollapsed,
     'defaultCategory': defaultCategory,
     'language': language,
     'reminderTime': reminderTime,
@@ -157,6 +165,7 @@ class AppSettings {
   factory AppSettings.fromMap(Map<dynamic, dynamic> map) => AppSettings(
     completionTone: map['completionTone'] as bool? ?? true,
     completionAnimation: map['completionAnimation'] as bool? ?? true,
+    calendarEventsCollapsed: map['calendarEventsCollapsed'] as bool? ?? false,
     defaultCategory: map['defaultCategory'] as String? ?? 'Inbox',
     language: map['language'] as String? ?? 'English',
     reminderTime: map['reminderTime'] as String? ?? '9:00 AM',

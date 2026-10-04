@@ -8,7 +8,6 @@ import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 import 'package:to_do_app/utils/string_utils.dart';
-import 'package:to_do_app/utils/log.dart';
 
 //import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -22,7 +21,6 @@ class NotificationService {
     //tz.initializeTimeZones();
     //var currentTimeZone = await FlutterTimezone.getLocalTimezone();
     //String zoneString = currentTimeZone.identifier;
-    //logd("detected zone is=====================>$zoneString");
     //tz.setLocalLocation(tz.getLocation(zoneString));
     //android intialization settings
     const AndroidInitializationSettings androidInit =
@@ -57,8 +55,66 @@ class NotificationService {
       return granted ?? false;
     }
 
-    // iOS always prompts via requestPermissions, assume granted if init succeeded
-    return true;
+    return (await Permission.notification.status).isGranted;
+  }
+
+  /// Asks for notification permission the first time a notification-backed
+  /// feature is enabled, rather than at app start. Shows a rationale dialog
+  /// before the system prompt, or points to app Settings if the permission
+  /// was permanently denied. Returns true if notifications may be scheduled.
+  static Future<bool> ensureNotificationPermission(
+    BuildContext context, {
+    String rationale =
+        'To remind you on time, the app needs permission to send notifications.',
+  }) async {
+    if (await isNotificationPermissionGranted()) return true;
+
+    void showDeniedSnackBar() {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Notification permission denied. Enable it in Settings.',
+          ),
+          action: SnackBarAction(label: 'Settings', onPressed: openAppSettings),
+        ),
+      );
+    }
+
+    if ((await Permission.notification.status).isPermanentlyDenied) {
+      showDeniedSnackBar();
+      return false;
+    }
+
+    // Denied but requestable — show rationale dialog first
+    if (!context.mounted) return false;
+    final bool userAccepted =
+        await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder:
+              (dialogContext) => AlertDialog(
+                title: const Text('Enable Notifications?'),
+                content: Text(rationale),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('Not Now'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: const Text('Continue'),
+                  ),
+                ],
+              ),
+        ) ??
+        false;
+
+    if (!userAccepted) return false;
+
+    final bool granted = await requestNotificationPermission();
+    if (!granted) showDeniedSnackBar();
+    return granted;
   }
 
   //show android dialog to request notification permission, returns true if granted, false if denied or permanently denied
@@ -75,17 +131,13 @@ class NotificationService {
               ?.requestNotificationsPermission();
 
       granted = result ?? false;
-      logd("Android notification permission granted: $granted");
 
       // Request exact alarm permission (Android 12+)
-      final bool? exactAlarmGranted =
-          await _notifications
-              .resolvePlatformSpecificImplementation<
-                AndroidFlutterLocalNotificationsPlugin
-              >()
-              ?.requestExactAlarmsPermission();
-
-      logd("Exact alarm permission granted: $exactAlarmGranted");
+      await _notifications
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.requestExactAlarmsPermission();
     } else if (Platform.isIOS) {
       final bool? result = await _notifications
           .resolvePlatformSpecificImplementation<
@@ -94,7 +146,6 @@ class NotificationService {
           ?.requestPermissions(alert: true, badge: true, sound: true);
 
       granted = result ?? false;
-      logd("iOS notification permission granted: $granted");
     }
 
     return granted;
@@ -274,7 +325,6 @@ class NotificationService {
     String? body,
     String? payload,
   }) async {
-    logd("instant notification showing");
     return _notifications.show(
       id,
       title,
@@ -300,10 +350,9 @@ class NotificationService {
     String? notifRingtoneUri,
     String? alarmRingtoneUri,
   }) async {
-    if (!await isNotificationPermissionGranted()) {
-      final bool granted = await requestNotificationPermission();
-      if (!granted) return;
-    }
+    // Never prompt from here — callers obtain permission via
+    // ensureNotificationPermission when the user enables a feature.
+    if (!await isNotificationPermissionGranted()) return;
     final scheduledDateTime = tz.TZDateTime(
       tz.UTC, // 👈 local time (important)
       year,
@@ -315,12 +364,7 @@ class NotificationService {
 
     final now = tz.TZDateTime.now(tz.UTC);
 
-    logd(
-      "------------------------------------------Scheduling notification for $scheduledDateTime | now=$now | repeat=$repeatType -----------",
-    );
-
     if (scheduledDateTime.isBefore(now)) {
-      logd("⚠️ Scheduled time is in the past! Reminder not set.");
       return;
     }
 
@@ -344,14 +388,13 @@ class NotificationService {
       default:
         matchComponents = null; // one-time notification
     }
-    if (await _notifications
-            .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin
-            >()
-            ?.requestFullScreenIntentPermission() ==
-        false) {
-      logd("Full screen intent permission denied");
-    }
+    if (isFullScreen &&
+        await _notifications
+                .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin
+                >()
+                ?.requestFullScreenIntentPermission() ==
+            false) {}
 
     try {
       final _title =
@@ -382,9 +425,7 @@ class NotificationService {
         // 🔁 THIS enables repeating
         matchDateTimeComponents: matchComponents,
       );
-    } catch (e) {
-      logd("Scheduling error: $e");
-    }
+    } catch (_) {}
   }
 
   static DateTime remainderDateTime(
@@ -433,7 +474,6 @@ class NotificationService {
   //     response.actionId ?? 'no_action',
   //   );
 
-  //   logd('Background action executed');
   // }
 
   @pragma('vm:entry-point')
@@ -442,14 +482,10 @@ class NotificationService {
   ) async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    logd('BACKGROUND action: ${response.actionId}');
-
     try {
       final id = response.id;
       final actionId = response.actionId;
-      logd("get list");
       final payload = StringUtils.listFromString(response.payload!);
-      logd("Notification payload: $payload");
       final DateTime now = DateTime.now();
 
       if (payload[1] == 'High') {
@@ -470,16 +506,12 @@ class NotificationService {
       }
 
       if (actionId == 'mark_done') {
-        logd("✅ Task $payload marked as done!");
         // TODO: update database / provider
       } else if (actionId == 'working') {
-        logd("🕒 Working on task $payload");
         DateTime dueDateTime = DateTimeUtilsHelper.parseDateTime(payload[2]);
 
         //final payload = response.payload;
       } else if (actionId == 'dismiss') {
-        logd("❌ Dismissed task $payload");
-
         List<Object> ids =
             payload.length > 5 ? StringUtils.listFromString(payload[5]) : [];
 
@@ -487,28 +519,18 @@ class NotificationService {
           try {
             final int parsedId = int.parse(remId.toString().trim());
             await cancelNotification(parsedId);
-          } catch (e) {
-            logd("Failed to parse/cancel notification id '$remId': $e");
-          }
+          } catch (_) {}
         }
-      } else {
-        logd("Notification tapped normally");
-      }
-    } catch (e) {
-      logd("---------action error : $e------");
-    }
+      } else {}
+    } catch (_) {}
   }
 
   @pragma('vm:entry-point')
   static void onNotificationResponse(NotificationResponse response) async {
-    logd("---------------------------------");
-
     try {
       final id = response.id;
       final actionId = response.actionId;
-      logd("get list");
       final payload = StringUtils.listFromString(response.payload!);
-      logd("Notification payload: $payload");
       final DateTime now = DateTime.now();
 
       if (payload[1] == 'High') {
@@ -529,10 +551,8 @@ class NotificationService {
       }
 
       if (actionId == 'mark_done') {
-        logd("✅ Task $payload marked as done!");
         // TODO: update database / provider
       } else if (actionId == 'working') {
-        logd("🕒 Working on task $payload");
         DateTime dueDateTime = DateTimeUtilsHelper.parseDateTime(payload[2]);
         // switch (payload[1]) {
         //   case 'High':
@@ -566,7 +586,6 @@ class NotificationService {
         //     // if (!newTime.isBefore(dueDateTime)) {
         //     //   newTime = dueDateTime;
         //     // }
-        //     // //logd("low - secheduled");
         //     // rescheduleNotification(
         //     //   payload: payload,
         //     //   id: id!,
@@ -576,24 +595,18 @@ class NotificationService {
         //     // );
         //     break;
         //   default:
-        //     logd("Unknown priority level: $payload");
         // }
 
         //final payload = response.payload;
       } else if (actionId == 'dismiss') {
-        logd("❌ Dismissed task $payload");
         List<Object> ids =
             payload.length > 5 ? StringUtils.listFromString(payload[5]) : [];
         for (Object remId in ids) {
           await cancelNotification(remId as int);
         }
         //await cancelNotification(id!);
-      } else {
-        logd("Notification tapped normally");
-      }
-    } catch (e) {
-      logd("---------action error : $e------");
-    }
+      } else {}
+    } catch (_) {}
   }
 
   // Reschedule a notification
@@ -632,14 +645,9 @@ class NotificationService {
 
   //function to cancel specific notification
   static Future<void> cancelNotification(int id) async {
-    logd("Attempting to cancel notification with id: $id");
     try {
       await _notifications.cancel(id);
-      logd("notification $id cancelled");
-    } catch (e) {
-      logd("Error cancelling notification $id: $e");
-    }
-    //logd("canceled: $id");
+    } catch (_) {}
     //if there is no notification with id, nothing happens
   }
 
@@ -652,7 +660,8 @@ class NotificationService {
 
   /// Schedules (or cancels, if the toggle is off) the three daily summary
   /// notifications. Safe to call repeatedly — call at app startup and again
-  /// whenever the relevant settings change.
+  /// whenever the relevant settings change. Never prompts for permission;
+  /// enabled summaries are skipped until permission has been granted.
   static Future<void> scheduleDailySummaryNotifications(ToDoDataBase db) async {
     await _scheduleOrCancelDaily(
       db: db,
@@ -696,10 +705,7 @@ class NotificationService {
       await cancelNotification(id);
       return;
     }
-    if (!await isNotificationPermissionGranted()) {
-      final granted = await requestNotificationPermission();
-      if (!granted) return;
-    }
+    if (!await isNotificationPermissionGranted()) return;
     final now = tz.TZDateTime.now(tz.local);
     var scheduled = tz.TZDateTime(
       tz.local,
@@ -729,9 +735,7 @@ class NotificationService {
             UILocalNotificationDateInterpretation.wallClockTime,
         matchDateTimeComponents: DateTimeComponents.time, // repeats daily
       );
-    } catch (e) {
-      logd("Failed to schedule daily summary notification $id: $e");
-    }
+    } catch (_) {}
   }
 
   static Future<void> scheduleInitialRemainderForTask(
@@ -746,80 +750,19 @@ class NotificationService {
     DateTime? dueTime = DateTimeUtilsHelper.parseTime(taskDetails['dueTime']);
 
     if (dueDate == null || dueTime == null) {
-      logd(
-        "scheduleInitialRemainderForTask: dueDate or dueTime is null, skipping.",
-      );
       return;
     }
 
     // --- Permission check ---
-    if (!await isNotificationPermissionGranted()) {
-      //runs only if not granted and user needs to be prompted. If permission is permanently denied, user is directed to settings. If permission is requestable, rationale dialog is shown first, then permission is requested. If user denies at any point, function exits without scheduling. This ensures we don't spam the user with permission requests and only ask when they set a reminder for the first time.
-      if (!context.mounted) return;
-      final messenger = ScaffoldMessenger.of(context);
-
-      final notifStatus = await Permission.notification.status;
-
-      if (notifStatus.isPermanentlyDenied) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Notification permission denied. Enable it in Settings.',
-            ),
-            action: SnackBarAction(
-              label: 'Settings',
-              onPressed: openAppSettings,
-            ),
-          ),
-        );
-        return;
-      }
-
-      // Denied but requestable — show rationale dialog first
-      if (!context.mounted) return;
-      final bool userAccepted =
-          await showDialog<bool>(
-            context: context,
-            barrierDismissible: false,
-            builder:
-                (_) => AlertDialog(
-                  title: const Text('Enable Reminders?'),
-                  content: const Text(
-                    'To remind you about this task on time, the app needs permission to send notifications.',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Not Now'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Continue'),
-                    ),
-                  ],
-                ),
-          ) ??
-          false;
-
-      if (!userAccepted) return;
-
-      final bool granted = await requestNotificationPermission();
-      if (!granted) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Notification permission denied. Enable it in Settings.',
-              ),
-              action: SnackBarAction(
-                label: 'Settings',
-                onPressed: openAppSettings,
-              ),
-            ),
-          );
-        }
-        return;
-      }
+    // Only asks the first time the user sets a reminder; exits without
+    // scheduling if they decline.
+    if (!context.mounted) return;
+    if (!await ensureNotificationPermission(
+      context,
+      rationale:
+          'To remind you about this task on time, the app needs permission to send notifications.',
+    )) {
+      return;
     }
 
     // --- Custom user-defined reminder ---
@@ -859,9 +802,7 @@ class NotificationService {
             [reminderId],
           ],
         );
-      } catch (e) {
-        logd("Schedule error from task page => $e");
-      }
+      } catch (_) {}
 
       toDoList[index].notificationIds = [reminderId];
       await db.saveTaskAt(index);
@@ -904,9 +845,6 @@ class NotificationService {
         }
       }
 
-      logd("${taskDetails['taskPriority']} reminder times: $reminderTimes");
-      logd("${taskDetails['taskPriority']} reminder IDs: $reminderIds");
-
       bool isFullScreen = isHighPriority;
 
       int i = 0;
@@ -941,9 +879,7 @@ class NotificationService {
               reminderIds,
             ],
           );
-        } catch (e) {
-          logd("${taskDetails['taskPriority']} task schedule error => $e");
-        }
+        } catch (_) {}
         isFullScreen = false; // only first notification is fullscreen
         i++;
       }

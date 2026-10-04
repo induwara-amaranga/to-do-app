@@ -1,54 +1,73 @@
-import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:to_do_app/models/settings.dart';
 
 class DateTimeUtilsHelper {
+  // ── Caches ──────────────────────────────────────────────────────────────
+  // Building a DateFormat compiles its pattern, and these helpers are called
+  // per task inside sort comparators, grouping and every tile build — so with
+  // a large list the same handful of patterns was being recompiled thousands
+  // of times per frame. Formatters are reused per pattern, and parse results
+  // (DateTime is immutable, so sharing is safe) are memoised per input
+  // string: stored due dates/times repeat heavily across tasks.
+  static final Map<String, DateFormat> _formatters = {};
+  static DateFormat _fmt(String pattern) =>
+      _formatters.putIfAbsent(pattern, () => DateFormat(pattern));
+
+  static const int _maxParseCacheSize = 4096;
+  static final Map<String, DateTime> _parsedDates = {};
+  static final Map<String, DateTime?> _parsedTimes = {};
+
+  static void _boundCache(Map<String, Object?> cache) {
+    if (cache.length >= _maxParseCacheSize) cache.clear();
+  }
+
   // Parse String → DateTime
   static DateTime? parseDate(String? dateStr, {String format = "yyyy-MM-dd"}) {
-    try {
-      DateTime taskDate;
-      if (dateStr != null && dateStr != "0000-00-00") {
-        try {
-          taskDate = DateFormat(format).parse(dateStr);
-        } catch (e) {
-          taskDate = DateTime(1970, 01, 01);
-        }
-      } else {
-        taskDate = DateTime(1970, 01, 01);
-      }
-      return taskDate;
-    } catch (e) {
-      return null; // return null if parsing fails
+    if (dateStr == null || dateStr == "0000-00-00") {
+      return DateTime(1970, 01, 01);
     }
+    final key = '$format|$dateStr';
+    final cached = _parsedDates[key];
+    if (cached != null) return cached;
+    DateTime taskDate;
+    try {
+      taskDate = _fmt(format).parse(dateStr);
+    } catch (e) {
+      taskDate = DateTime(1970, 01, 01);
+    }
+    _boundCache(_parsedDates);
+    return _parsedDates[key] = taskDate;
   }
 
   // Format DateTime → String
   static String formatDate(DateTime? date, {String format = "yyyy-MM-dd"}) {
     String formatedDate =
         date != null
-            ? DateFormat(format).format(date)
-            : DateFormat(format).format(DateTime.now());
+            ? _fmt(format).format(date)
+            : _fmt(format).format(DateTime.now());
 
     return formatedDate;
   }
 
   static DateTime? parseTime(String timeStr, {String format = "HH:mm"}) {
+    if (timeStr == "24:00") return DateTime(1970, 1, 1, 23, 59, 59);
+    final key = '$format|$timeStr';
+    if (_parsedTimes.containsKey(key)) return _parsedTimes[key];
+    DateTime? taskTime;
     try {
-      DateTime? taskTime =
-          timeStr != "24:00"
-              ? DateFormat(format).parse(timeStr)
-              : DateTime(1970, 1, 1, 23, 59, 59);
-      return taskTime;
+      taskTime = _fmt(format).parse(timeStr);
     } catch (e) {
-      return null; // return null if parsing fails
+      taskTime = null; // null if parsing fails
     }
+    _boundCache(_parsedTimes);
+    return _parsedTimes[key] = taskTime;
   }
 
   static String formatTime(DateTime? time, {String format = "HH:mm"}) {
     if (time == null) return "24:00";
-    return DateFormat(format).format(time);
+    return _fmt(format).format(time);
   }
 
   static DateTime parseDateTime(String timestamp) {
@@ -96,11 +115,7 @@ class DateTimeUtilsHelper {
       dateTime.minute,
       dateTime.second,
     );
-    final localTzDateTime = tz.TZDateTime.from(utcTime, tz.local);
-    if (kDebugMode) {
-      print('tz.local=${tz.local.name} utc=$utcTime → $localTzDateTime');
-    }
-    return localTzDateTime;
+    return tz.TZDateTime.from(utcTime, tz.local);
   }
 
   static DateTime utcDateTimeFromUTCvalues(DateTime dateTime) {
@@ -171,32 +186,32 @@ class DateTimeUtilsHelper {
   /// Numeric day/month/year order per [AppSettings.dateFormat], e.g. "5/1/2026".
   static String displayDateNumeric(DateTime? date, AppSettings settings) {
     if (date == null) return '';
-    return DateFormat(_numericDatePattern(settings.dateFormat)).format(date);
+    return _fmt(_numericDatePattern(settings.dateFormat)).format(date);
   }
 
   /// Named-month date honoring the day/month order of [AppSettings.dateFormat],
   /// e.g. "5 Jan, 2026" (d/m/y) vs "Jan 5, 2026" (m/d/y).
   static String displayDateFriendly(DateTime? date, AppSettings settings) {
     if (date == null) return '';
-    return DateFormat(_friendlyDatePattern(settings.dateFormat)).format(date);
+    return _fmt(_friendlyDatePattern(settings.dateFormat)).format(date);
   }
 
   /// Compact "MMM d" / "d MMM" (no year) for chips and other tight spaces.
   static String displayDayMonth(DateTime date, AppSettings settings) {
     final pattern = settings.dateFormat == 'm/d/y' ? 'MMM d' : 'd MMM';
-    return DateFormat(pattern).format(date);
+    return _fmt(pattern).format(date);
   }
 
   static String displayMonthYear(DateTime date, AppSettings settings) {
     final pattern = settings.dateFormat == 'y/m/d' ? 'yyyy MMMM' : 'MMMM yyyy';
-    return DateFormat(pattern).format(date);
+    return _fmt(pattern).format(date);
   }
 
   /// 12-hour ("h:mm a") or 24-hour ("HH:mm") per [AppSettings.timeFormat].
   static String displayTime(DateTime? time, AppSettings settings) {
     if (time == null) return '';
     final pattern = settings.timeFormat == '24 hour' ? 'HH:mm' : 'h:mm a';
-    return DateFormat(pattern).format(time);
+    return _fmt(pattern).format(time);
   }
 
   /// Maps the friendly labels shown in the Time Zone picker (Settings ›

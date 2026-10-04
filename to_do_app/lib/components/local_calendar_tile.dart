@@ -5,6 +5,10 @@ import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/pages/local_calendar_sync_page.dart';
 import 'package:to_do_app/services/local_calendar_service.dart';
 
+import 'package:to_do_app/components/sync_provider_card.dart';
+
+import 'package:to_do_app/components/brand_logo.dart';
+
 class LocalCalendarTile extends StatefulWidget {
   final ToDoDataBase db;
 
@@ -188,120 +192,23 @@ class _LocalCalendarTileState extends State<LocalCalendarTile> {
     final isSyncActive =
         widget.db.syncToCalendars["local"] != "none" ||
         widget.db.viewOnlyCalendars["local"]!.isNotEmpty;
-    final outline = Theme.of(context).colorScheme.outline;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
 
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: isSyncActive ? _brandColor.withValues(alpha: 0.5) : outline,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        color: Theme.of(context).colorScheme.secondary,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: _brandColor,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.calendar_today, color: Colors.white),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Device Calendar",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        isSyncActive ? "Connected" : "Not connected",
-                        style: TextStyle(
-                          fontSize: 12,
-                          color:
-                              isSyncActive
-                                  ? _brandColor
-                                  : onSurface.withValues(alpha: 0.5),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Divider(height: 1, color: outline),
-          // Description
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Text(
-              "Sync tasks with your device's built-in calendar app.",
-              style: TextStyle(
-                fontSize: 13,
-                color: onSurface.withValues(alpha: 0.6),
-              ),
-            ),
-          ),
-          // Switch
-          SwitchListTile(
-            title: const Text("Enable sync"),
-            value: isSyncActive,
-            onChanged:
-                _isLoading
-                    ? null
-                    : (value) async {
-                      if (value) {
-                        await _handleEnableSync();
-                      } else {
-                        await _disableSync();
-                      }
-                    },
-            activeColor: Theme.of(context).colorScheme.primary,
-            secondary:
-                _isLoading
-                    ? SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    )
-                    : null,
-          ),
-          // Manage footer (only when active)
-          if (isSyncActive) ...[
-            Divider(height: 1, color: outline),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton.icon(
-                    onPressed: _isLoading ? null : _handleManage,
-                    icon: const Icon(Icons.tune, size: 16),
-                    label: const Text("Manage"),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
+    return SyncProviderCard(
+      name: "Device Calendar",
+      brandIcon: BrandIcon.deviceCalendar,
+      brandColor: _brandColor,
+      connected: isSyncActive,
+      loading: _isLoading,
+      status: isSyncActive ? "Connected" : "Not connected",
+      description: "Sync tasks with your device's built-in calendar app.",
+      onToggle: (value) async {
+        if (value) {
+          await _handleEnableSync();
+        } else {
+          await _disableSync();
+        }
+      },
+      onManage: _handleManage,
     );
   }
 }

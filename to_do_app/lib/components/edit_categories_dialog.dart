@@ -251,10 +251,6 @@ class _EditCategoriesDialogState extends State<EditCategoriesDialog>
       actions: [
         TextButton(
           onPressed: () {
-            print("category added: $categoryAddedDeleted");
-
-            print("Edited categories: $editedCategories");
-            print("Hiding categories: $hidingCategories");
             widget.onCategoryChanged(
               widget.categoryTypes,
               hidingCategories,

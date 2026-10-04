@@ -94,7 +94,6 @@
 //                   value: widget.taskCompleted, // bool variable from state
 //                   onChanged: (value) {
 //                     widget.onChanged?.call(widget.index, value);
-//                     //print("===================$value");
 //                   },
 
 //                   activeColor: Theme.of(context).colorScheme.onSecondary,
@@ -120,7 +119,6 @@
 //                   borderRadius: BorderRadius.circular(20),
 //                   icon: Icon(Icons.more_vert),
 //                   onSelected: (value) {
-//                     //print(widget.isStarred);
 //                     if (value == "Star") {
 //                       widget.onEdit?.call(widget.index, {
 //                         'isStarred': (!widget.isStarred).toString(),

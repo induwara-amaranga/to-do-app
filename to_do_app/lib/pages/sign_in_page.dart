@@ -4,10 +4,17 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:hive/hive.dart';
+import 'package:provider/provider.dart';
 //import 'package:path_provider/path_provider.dart';
 import 'package:to_do_app/data/database.dart';
+import 'package:to_do_app/providers/auth_provider.dart';
 import 'package:to_do_app/services/google_drive_service.dart';
 import 'package:to_do_app/services/google_sign.dart';
+import 'package:to_do_app/themes/app_colors.dart';
+
+import 'package:to_do_app/components/app_toggle.dart';
+
+import 'package:to_do_app/components/brand_logo.dart';
 
 class SignInPage extends StatefulWidget {
   final String? filePath;
@@ -35,25 +42,23 @@ class _MyWidgetState extends State<SignInPage> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
-        bool isReady = await GoogleAuthService.ensureApisReady();
-        print("Google APIs ready: $isReady");
-      } catch (e) {
-        print("Error restoring last session $e");
-      }
+        await GoogleAuthService.ensureApisReady();
+      } catch (_) {}
     });
-    print("file path in SignInPage: ${widget.filePath}");
   }
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
     return Scaffold(
       appBar: AppBar(
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) async {
-              print("Selected: $value");
               if (value == 'signOut') {
                 await GoogleAuthService.signOut();
+                if (!context.mounted) return;
+                context.read<AuthProvider>().signOutGoogle();
                 setState(() {
                   isSignedIn = false;
                 });
@@ -72,33 +77,44 @@ class _MyWidgetState extends State<SignInPage> {
         ],
         title: Text(
           'Sign In with Google',
-          style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+          ),
         ),
         backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
       ),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            SizedBox(height: 40),
+            SizedBox(height: 20),
             CircleAvatar(
-              backgroundColor: Colors.white,
+              backgroundColor: Theme.of(context).colorScheme.secondary,
               radius: 50,
               child: ClipOval(
                 child: Image.network(
-                  GoogleAuthService.currentUser?.photoUrl ?? '',
+                  auth.photoUrl,
                   fit: BoxFit.cover,
                   width: 60,
                   height: 60,
                   errorBuilder: (context, error, stackTrace) {
-                    return Icon(Icons.person_rounded, size: 45);
+                    return Icon(
+                      Icons.person_rounded,
+                      size: 48,
+                      color: context.appColors.muted,
+                    );
                   },
                 ),
               ),
             ),
-            //SizedBox(height: 10),
+            SizedBox(height: 14),
             Text(
-              GoogleAuthService.currentUser?.displayName ?? 'Not Signed In!',
+              auth.isGoogleSignedIn && auth.displayName.isNotEmpty
+                  ? auth.displayName
+                  : 'Not Signed In!',
 
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -115,24 +131,21 @@ class _MyWidgetState extends State<SignInPage> {
                         await GoogleAuthService.signIn();
                     if (user != null) {
                       // Navigate to the next page or update the UI accordingly
-                      print("Signed in as ${user.displayName}");
-                      // widget.db.accountDetails["userName"] =
-                      //     user.displayName ?? "none";
-                      // widget.db.accountDetails["profilePicture"] =
-                      //     user.photoUrl ?? "none";
-                      // widget.db.updateDataBase();
+                      if (!context.mounted) return;
+                      context.read<AuthProvider>().setGoogleSignedIn(
+                        true,
+                        displayName: user.displayName ?? user.email,
+                        email: user.email,
+                        photoUrl: user.photoUrl ?? '',
+                      );
 
                       setState(() {
                         isSignedIn = true;
                       });
                       //
                       widget.onSignIn();
-                    } else {
-                      print("Sign-in failed");
-                    }
-                  } catch (e) {
-                    print("Error during sign-in: $e");
-                  }
+                    } else {}
+                  } catch (_) {}
                 },
                 child: Image.asset(
                   scale: 1.5,
@@ -143,7 +156,7 @@ class _MyWidgetState extends State<SignInPage> {
                 ),
               ),
             ),
-            SizedBox(height: 20),
+            SizedBox(height: 2),
             // ElevatedButton(
             //   onPressed: () async {
             //     String boxName = "mybox";
@@ -158,7 +171,6 @@ class _MyWidgetState extends State<SignInPage> {
             //     // 2. Create/Get folder on Drive
             //     final folderId = await GoogleDriveService.createFolder();
             //     if (folderId == null) {
-            //       print("Error creating/accessing folder on Google Drive");
             //       return;
             //     }
 
@@ -171,20 +183,17 @@ class _MyWidgetState extends State<SignInPage> {
             //         fileId,
             //         widget.filePath!,
             //       );
-            //       print("Downloaded file from Drive");
             //     }
 
             //     // 5. Upload local file to Drive (overwrite if necessary)
-            //     final uploadedId = await GoogleDriveService.uploadFileToFolder(
+            //     await GoogleDriveService.uploadFileToFolder(
             //       hiveFile,
             //       folderId,
             //     );
-            //     print("Uploaded/Updated file ID = $uploadedId");
 
             //     // 6. Reopen Hive box after file is downloaded/overwritten
-            //     final _myBox = await Hive.openBox(boxName);
+            //     await Hive.openBox(boxName);
 
-            //     print("Hive box opened: ${_myBox.path}");
             //     // 7. Load or initialize data
             //     if (_myBox.get("TODOLIST") == null &&
             //         _myBox.get("CATEGORIES") == null) {
@@ -211,7 +220,6 @@ class _MyWidgetState extends State<SignInPage> {
                 // 2. Create/Get folder on Drive
                 final folderId = await GoogleDriveService.createFolder();
                 if (folderId == null) {
-                  print("Error creating/accessing folder on Google Drive");
                   return;
                 }
 
@@ -224,20 +232,14 @@ class _MyWidgetState extends State<SignInPage> {
                 //     fileId,
                 //     widget.filePath!,
                 //   );
-                //   print("Downloaded file from Drive");
                 // }
 
                 // 5. Upload local file to Drive (overwrite if necessary)
-                final uploadedId = await GoogleDriveService.uploadFileToFolder(
-                  hiveFile,
-                  folderId,
-                );
-                print("Uploaded/Updated file ID = $uploadedId");
+                await GoogleDriveService.uploadFileToFolder(hiveFile, folderId);
 
                 // // 6. Reopen Hive box after file is downloaded/overwritten
-                // final _myBox = await Hive.openBox(boxName);
+                // await Hive.openBox(boxName);
 
-                // print("Hive box opened: ${_myBox.path}");
                 // // 7. Load or initialize data
                 // if (_myBox.get("TODOLIST") == null &&
                 //     _myBox.get("CATEGORIES") == null) {
@@ -247,10 +249,22 @@ class _MyWidgetState extends State<SignInPage> {
                 // }
               },
 
-              child: Text('Backup'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kAccent,
+                foregroundColor: kOnAccent,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 11,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              child: const Text('Backup'),
             ),
 
-            SizedBox(height: 10),
+            SizedBox(height: 14),
             ElevatedButton(
               onPressed: () async {
                 String boxName = "mybox";
@@ -265,7 +279,6 @@ class _MyWidgetState extends State<SignInPage> {
                 // 2. Create/Get folder on Drive
                 final folderId = await GoogleDriveService.createFolder();
                 if (folderId == null) {
-                  print("Error creating/accessing folder on Google Drive");
                   return;
                 }
 
@@ -278,7 +291,6 @@ class _MyWidgetState extends State<SignInPage> {
                     fileId,
                     widget.filePath!,
                   );
-                  print("Downloaded file from Drive");
                 }
 
                 // // 5. Upload local file to Drive (overwrite if necessary)
@@ -286,30 +298,34 @@ class _MyWidgetState extends State<SignInPage> {
                 //   hiveFile,
                 //   folderId,
                 // );
-                //print("Uploaded/Updated file ID = $uploadedId");
 
                 // 6. Reopen Hive box after file is downloaded/overwritten
-                final _myBox = await Hive.openBox(boxName);
+                await Hive.openBox(boxName);
 
-                print("Hive box opened: ${_myBox.path}");
                 // 7. Load or initialize data
 
                 widget.onImported();
               },
 
-              child: Text('Restore'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kAccent,
+                foregroundColor: kOnAccent,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 11,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              child: const Text('Restore'),
             ),
-            SizedBox(height: 40),
+            SizedBox(height: 48),
             Row(
               children: [
-                Image.asset(
-                  scale: 2.5,
-                  'assets/images/google/logo_drive_2020q4_color_2x_web_64dp.png',
-                  key: const ValueKey('drive_image'),
-
-                  fit: BoxFit.cover,
-                ),
-                SizedBox(width: 10),
+                const BrandLogo(BrandIcon.googleDrive),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -321,24 +337,20 @@ class _MyWidgetState extends State<SignInPage> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      SizedBox(height: 10),
+                      SizedBox(height: 4),
                       Text(
                         'Backup and Sync Your Tasks Seamlessly across Devices',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: context.appColors.muted,
+                        ),
                         softWrap: true,
                       ),
                     ],
                   ),
                 ),
-                Switch(
+                AppToggle(
                   value: isAutoSyncOn,
-                  activeColor: Colors.white, // thumb color when ON
-                  activeTrackColor:
-                      Theme.of(
-                        context,
-                      ).colorScheme.primary, // background track when ON
-                  inactiveThumbColor: Colors.grey[400], // thumb when OFF
-                  inactiveTrackColor: Colors.grey[300],
                   onChanged: (value) {
                     setState(() => isAutoSyncOn = value);
                   },
@@ -355,10 +367,13 @@ class _MyWidgetState extends State<SignInPage> {
                     'Sync History',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                  SizedBox(height: 10),
+                  SizedBox(height: 8),
                   Text(
                     'Last synced: Never',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: context.appColors.muted,
+                    ),
                     softWrap: true,
                   ),
                 ],

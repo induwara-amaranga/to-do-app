@@ -110,8 +110,27 @@ flutter:
     - assets/images/google/android_light_rd_SI@2x.png
     - assets/images/google/logo_drive_2020q4_color_2x_web_64dp.png
     - assets/images/google/icons8-google-calendar-48-2.png
+    - assets/images/google/icons8-google-calendar-96.png
     - assets/images/outlook/icons8-microsoft-outlook-2025-48-2.png
+    - assets/images/outlook/icons8-microsoft-outlook-2025-96.png
     - assets/msal_config.json
+
+  # Manrope is the heading face used across the redesigned screens (see the
+  # Figma file). One variable font file; Flutter drives its wght axis from
+  # FontWeight, so each weight below points at the same asset.
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-Variable.ttf
+          weight: 400
+        - asset: assets/fonts/Manrope-Variable.ttf
+          weight: 500
+        - asset: assets/fonts/Manrope-Variable.ttf
+          weight: 600
+        - asset: assets/fonts/Manrope-Variable.ttf
+          weight: 700
+        - asset: assets/fonts/Manrope-Variable.ttf
+          weight: 800
     
     #- assets/images/star.png
   # An image asset can refer to one or more resolution-specific "variants", see

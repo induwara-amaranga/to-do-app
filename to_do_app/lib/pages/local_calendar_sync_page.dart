@@ -1,10 +1,12 @@
 import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:to_do_app/components/sync_page_widgets.dart';
 import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/services/local_calendar_service.dart';
 import 'package:to_do_app/providers/calendar_sync_provider.dart';
-import 'package:uuid/uuid.dart';
+
+import 'package:to_do_app/components/brand_logo.dart';
 
 class LocalCalendarSyncPage extends StatefulWidget {
   final List<Calendar> calendars;
@@ -21,16 +23,14 @@ class LocalCalendarSyncPage extends StatefulWidget {
 }
 
 class _LocalCalendarSyncPageState extends State<LocalCalendarSyncPage> {
+
   bool? syncToCalendar = false;
   late Map<String, bool> importCalendars = {};
   late Map<String, bool> syncCalendars = {};
   List<Calendar> calendars = [];
   bool isImportLoading = false;
-  bool isImportRefreshing = false;
-
   bool isViewOnlyLoading = false;
   bool isSyncing = false;
-  //CalendarSyncProvider provider = CalendarSyncProvider();
 
   @override
   void initState() {
@@ -42,7 +42,6 @@ class _LocalCalendarSyncPageState extends State<LocalCalendarSyncPage> {
     if (widget.db.syncToCalendars["local"] != "none") {
       syncToCalendar = true;
     }
-    final uuid = Uuid();
   }
 
   void _toggleImportCalendar(String calendarId, bool? value) {
@@ -61,12 +60,7 @@ class _LocalCalendarSyncPageState extends State<LocalCalendarSyncPage> {
     Map<dynamic, dynamic> selectedCalMap,
   ) async {
     final selected =
-        calendars
-            .where(
-              (cal) => selectedCalMap[cal.id] == true,
-              //cal.id != widget.db.syncToCalendars["local"].hashCode,
-            )
-            .toList();
+        calendars.where((cal) => selectedCalMap[cal.id] == true).toList();
 
     if (selected.isEmpty) {
       ScaffoldMessenger.of(
@@ -76,9 +70,6 @@ class _LocalCalendarSyncPageState extends State<LocalCalendarSyncPage> {
       return [];
     }
 
-    // TODO: implement LocalCalendarService to import tasks from selected calendars
-    // await LocalCalendarService.importEvents(selected);
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text("${selected.length} calendar(s) selected for sync"),
@@ -87,272 +78,140 @@ class _LocalCalendarSyncPageState extends State<LocalCalendarSyncPage> {
     return selected;
   }
 
+  Future<void> _refreshCalendars() async {
+    calendars = await LocalCalendarService.getCalendars();
+    importCalendars = {for (var cal in calendars) cal.id!: false};
+    syncCalendars = {for (var cal in calendars) cal.id!: false};
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _importSelected() async {
+    setState(() {
+      isImportLoading = true;
+    });
+    final selectedImportCalendars = await _getSelectedCalendars(
+      importCalendars,
+    );
+    await LocalCalendarService.createNewCalendar(calendars);
+
+    for (var cal in selectedImportCalendars) {
+      await LocalCalendarService.importCalendarEventsToDB(
+        await LocalCalendarService.getEvents(cal.id),
+        widget.db,
+      );
+    }
+    if (!mounted) return;
+    context.read<CalendarSyncProvider>().notify();
+    setState(() {
+      isImportLoading = false;
+    });
+  }
+
+  Future<void> _showViewOnly() async {
+    setState(() {
+      isViewOnlyLoading = true;
+    });
+    final selectedSyncCalendars = await _getSelectedCalendars(syncCalendars);
+
+    for (var cal in selectedSyncCalendars) {
+      // Mark calendar as synced
+      widget.db.viewOnlyCalendars["local"]!.add(cal.id!);
+
+      // Fetch events from this calendar
+      final events = await LocalCalendarService.getEvents(cal.id);
+
+      await LocalCalendarService.importViewOnlyEventsToDB(events, widget.db);
+    }
+    if (!mounted) return;
+    context.read<CalendarSyncProvider>().notify();
+    setState(() {
+      isViewOnlyLoading = false;
+    });
+  }
+
+  Future<void> _setSyncEnabled(bool value) async {
+    setState(() {
+      syncToCalendar = value;
+    });
+    final Calendar toDoCalendar;
+    if (value) {
+      setState(() {
+        isSyncing = true;
+      });
+      toDoCalendar = await LocalCalendarService.createNewCalendar(calendars);
+      widget.db.syncToCalendars["local"] = toDoCalendar.id!;
+      try {
+        await LocalCalendarService.syncTasksToCalendar(
+          widget.db,
+          toDoCalendar.id.toString(),
+        );
+        await LocalCalendarService.syncTasksFromCalendar(widget.db);
+      } catch (_) {}
+    } else {
+      widget.db.syncToCalendars["local"] = "none";
+    }
+    widget.db.updateDataBase();
+    if (!mounted) return;
+    context.read<CalendarSyncProvider>().notify();
+    setState(() {
+      isSyncing = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final todoCalendarId = widget.db.syncToCalendars["local"];
     return Scaffold(
-      appBar: AppBar(
-        title: Row(children: [const Text("Sync Local Calendars")]),
-        actions: [],
-      ),
-      body: Column(
+      appBar: syncAppBar(context, "Sync Device Calendars"),
+      body: SyncPageBody(
         children: [
-          const Divider(),
-          Row(
+          const ProviderAccountCard(
+            name: "Device Calendar",
+            brandIcon: BrandIcon.deviceCalendar,
+            subtitle: "On this device",
+          ),
+          CalendarSection(
+            title: "Import events",
+            description:
+                "Copy events from these calendars into your task list as editable tasks.",
+            actionLabel: "Import",
+            loading: isImportLoading,
+            onRefresh: _refreshCalendars,
+            onApply: _importSelected,
             children: [
-              SizedBox(
-                width: 270,
-                child: Text(
-                  "Import events from following Calendars to local Todolist",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              for (final cal in calendars)
+                if (cal.id != todoCalendarId)
+                  CalendarCheckRow(
+                    name: cal.name ?? 'Unnamed Calendar',
+                    account: cal.accountName ?? 'Unknown account',
+                    checked: importCalendars[cal.id] ?? false,
+                    onChanged: (v) => _toggleImportCalendar(cal.id!, v),
+                  ),
+            ],
+          ),
+          CalendarSection(
+            title: "View-only events",
+            description:
+                "Show events from these calendars in your task list without importing them.",
+            actionLabel: "Show events",
+            loading: isViewOnlyLoading,
+            onRefresh: _refreshCalendars,
+            onApply: _showViewOnly,
+            children: [
+              for (final cal in calendars)
+                CalendarCheckRow(
+                  name: cal.name ?? 'Unnamed Calendar',
+                  account: cal.accountName ?? 'Unknown account',
+                  checked: syncCalendars[cal.id] ?? false,
+                  onChanged: (v) => _toggleSyncCalendar(cal.id!, v),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () async {
-                  calendars = await LocalCalendarService.getCalendars();
-                  //calendars = widget.calendars;
-                  importCalendars = {for (var cal in calendars) cal.id!: false};
-                  syncCalendars = {for (var cal in calendars) cal.id!: false};
-                  setState(() {});
-                  // TODO: reload calendars if needed
-                },
-              ),
-              isImportLoading
-                  ? Padding(
-                    padding: const EdgeInsets.all(1.0),
-                    child: SizedBox(
-                      width: 30,
-                      height: 30,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  )
-                  : IconButton(
-                    icon: const Icon(Icons.check),
-                    onPressed: () async {
-                      setState(() {
-                        isImportLoading = true;
-                      });
-                      final selectedImportCalendars =
-                          await _getSelectedCalendars(importCalendars);
-                      //print("import");
-                      final Calendar toDoCalendar;
-                      toDoCalendar =
-                          await LocalCalendarService.createNewCalendar(
-                            calendars,
-                          );
-                      //widget.db.viewOnlyCalendars["local"] = [];
-
-                      for (var cal in selectedImportCalendars) {
-                        //widget.db.viewOnlyCalendars["local"].add(cal.id);
-                        print("to do calendar ${toDoCalendar.name}");
-                        print("${cal.name}");
-                        await LocalCalendarService.importCalendarEventsToDB(
-                          await LocalCalendarService.getEvents(cal.id),
-                          widget.db,
-                        );
-                      }
-                      //print("sync value $syncToCalendar");
-                      context.read<CalendarSyncProvider>().notify();
-                      setState(() {
-                        isImportLoading = false;
-                      });
-                      // Pop back to previous screen after import finishes
-                      // if (context.mounted) {
-                      //   Navigator.pop(context);
-                      // }
-                    },
-                  ),
             ],
           ),
-          SizedBox(height: 20),
-          Expanded(
-            child: ListView.builder(
-              itemCount: calendars.length,
-              itemBuilder: (context, index) {
-                final calendar = calendars[index];
-                if (calendar.id == widget.db.syncToCalendars["local"]) {
-                  return SizedBox.shrink();
-                }
-                return CheckboxListTile(
-                  title: Text(calendar.name ?? 'Unnamed Calendar'),
-                  subtitle: Text(
-                    calendar.accountName ?? 'Unknown account',
-                    style: TextStyle(color: Colors.grey.shade500),
-                  ),
-                  value: importCalendars[calendar.id],
-                  onChanged:
-                      (value) => _toggleImportCalendar(calendar.id!, value),
-                );
-              },
-            ),
-          ),
-          const Divider(),
-          Row(
-            children: [
-              SizedBox(
-                width: 270,
-                child: Text(
-                  "View events from following Calendar in Todolist(view only)",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () async {
-                  calendars = await LocalCalendarService.getCalendars();
-                  //calendars = widget.calendars;
-                  importCalendars = {for (var cal in calendars) cal.id!: false};
-                  syncCalendars = {for (var cal in calendars) cal.id!: false};
-                  setState(() {});
-                  // TODO: reload calendars if needed
-                },
-              ),
-              isViewOnlyLoading
-                  ? Padding(
-                    padding: const EdgeInsets.all(1.0),
-                    child: SizedBox(
-                      width: 30,
-                      height: 30,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  )
-                  : IconButton(
-                    icon: const Icon(Icons.check),
-                    onPressed: () async {
-                      setState(() {
-                        isViewOnlyLoading = true;
-                      });
-                      final selectedSyncCalendars = await _getSelectedCalendars(
-                        syncCalendars,
-                      );
-                      //print("import");
-                      // final Calendar toDoCalendar;
-                      // toDoCalendar = await LocalCalendarService.createNewCalendar(
-                      //   widget.calendars,
-                      // );
-                      //widget.db.viewOnlyCalendars["local"] = selectedImportCalendars;
-                      //widget.db.localCalTasks = [];
-
-                      for (var cal in selectedSyncCalendars) {
-                        // Mark calendar as synced
-                        widget.db.viewOnlyCalendars["local"]!.add(cal.id!);
-
-                        print("Syncing from calendar: ${cal.name}");
-
-                        // Fetch events from this calendar
-                        final events = await LocalCalendarService.getEvents(
-                          cal.id,
-                        );
-
-                        await LocalCalendarService.importViewOnlyEventsToDB(
-                          events,
-                          widget.db,
-                        );
-                      }
-                      //print("sync value $syncToCalendar");
-                      context.read<CalendarSyncProvider>().notify();
-                      setState(() {
-                        isViewOnlyLoading = false;
-                      });
-                      // Pop back to previous screen after import finishes
-                      // if (context.mounted) {
-                      //   Navigator.pop(context);
-                      // }
-                    },
-                  ),
-            ],
-          ),
-          SizedBox(height: 20),
-          Expanded(
-            child: ListView.builder(
-              itemCount: calendars.length,
-              itemBuilder: (context, index) {
-                final calendar = calendars[index];
-                return CheckboxListTile(
-                  title: Text(calendar.name ?? 'Unnamed Calendar'),
-                  subtitle: Text(
-                    calendar.accountName ?? 'Unknown account',
-                    style: TextStyle(color: Colors.grey.shade500),
-                  ),
-                  value: syncCalendars[calendar.id],
-                  onChanged:
-                      (value) => _toggleSyncCalendar(calendar.id!, value),
-                );
-              },
-            ),
-          ),
-          Divider(),
-          SizedBox(height: 20),
-          Row(
-            children: [
-              Text(
-                "Sync tasks between local Todo list and Calendar",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-
-              SizedBox(width: 10),
-              isSyncing
-                  ? Padding(
-                    padding: const EdgeInsets.all(1.0),
-                    child: SizedBox(
-                      width: 30,
-                      height: 30,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  )
-                  : SizedBox.shrink(),
-            ],
-          ),
-          CheckboxListTile(
-            title: Text("Select check box to enable syncing to calendar"),
-            subtitle: Text(
-              "A new calendar \"ToDoList\" will be used for syncting.Only upcoming tasks will be synced.Past tasks will not be synced",
-              style: TextStyle(color: Colors.grey.shade500),
-            ),
-            value: syncToCalendar,
-            onChanged: (value) async {
-              setState(() {
-                syncToCalendar = value;
-              });
-              final Calendar toDoCalendar;
-              print("sync value $syncToCalendar");
-              if (value != null && value) {
-                setState(() {
-                  isSyncing = true;
-                });
-                toDoCalendar = await LocalCalendarService.createNewCalendar(
-                  calendars,
-                );
-                print("to do calendar ${toDoCalendar.name}");
-                widget.db.syncToCalendars["local"] = toDoCalendar.id!;
-                try {
-                  await LocalCalendarService.syncTasksToCalendar(
-                    widget.db,
-                    toDoCalendar.id.toString(),
-                  );
-                  await LocalCalendarService.syncTasksFromCalendar(widget.db);
-                  //print("tasks added");
-                } catch (d, st) {
-                  print("failed to sync calendars $d ,$st");
-                }
-              } else {
-                widget.db.syncToCalendars["local"] = "none";
-              }
-              widget.db.updateDataBase();
-              context.read<CalendarSyncProvider>().notify();
-              setState(() {
-                isSyncing = false;
-              });
-            },
+          SyncTasksSection(
+            calendarName: "device calendar",
+            value: syncToCalendar ?? false,
+            syncing: isSyncing,
+            onChanged: _setSyncEnabled,
           ),
         ],
       ),
