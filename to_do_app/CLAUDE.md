@@ -25,9 +25,12 @@ flutter run -d <device-id>      # run on a device/emulator
 flutter build apk --debug       # Android debug build
 ```
 
-There is no real test suite. `test/widget_test.dart` is the unmodified Flutter
-template stub (it asserts a counter UI this app doesn't have) — don't treat
-`flutter test` as a verification signal.
+`flutter test` runs the suite under `test/` (models, utils, services, Hive
+database, providers, components, and `TaskPage`). Shared fixtures live in
+`test/helpers/test_data.dart` (`makeTask`, `TestDb` for a real Hive box in a
+temp dir, `initTestTimeZone`). Not covered: calendar sync, sign-in and
+notification scheduling (they need platform channels). Tests tagged `skip:`
+document known bugs.
 
 **Gradle memory gotcha**: `android/gradle.properties` requests
 `org.gradle.jvmargs=-Xmx8G`. On a memory-constrained machine this makes the
