@@ -14,16 +14,13 @@ import 'package:to_do_app/pages/statistics_page.dart';
 import 'package:to_do_app/pages/settings_page.dart';
 import 'package:to_do_app/pages/task_page.dart';
 import 'package:to_do_app/providers/calendar_sync_provider.dart';
+import 'package:to_do_app/providers/settings_providers.dart';
 import 'package:to_do_app/providers/file_search_provider.dart';
-import 'package:to_do_app/providers/file_sort_provider.dart';
 import 'package:to_do_app/providers/data_provider.dart';
-import 'package:to_do_app/providers/view_provider.dart';
 import 'package:to_do_app/services/google_sign.dart';
 import 'package:to_do_app/services/outlook_sign.dart';
 import 'package:to_do_app/themes/theme_provider.dart';
 import 'package:to_do_app/providers/auth_provider.dart';
-import 'package:to_do_app/providers/grouping_provider.dart';
-import 'package:to_do_app/providers/sorting_provider.dart';
 import 'package:to_do_app/providers/searching_provider.dart';
 import 'services/notification_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -106,16 +103,10 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(
-          create: (_) => ThemeProvider(accent: Color(db.settings.accentColor)),
-        ),
-        ChangeNotifierProvider(create: (_) => GroupingProvider()),
-        ChangeNotifierProvider(create: (_) => SortingProvider()),
+        ...settingsBackedProviders(db),
         ChangeNotifierProvider(create: (_) => SearchingProvider()),
         ChangeNotifierProvider(create: (_) => CalendarSyncProvider()),
         ChangeNotifierProvider(create: (_) => FileSearchProvider()),
-        ChangeNotifierProvider(create: (_) => FileSortProvider()),
-        ChangeNotifierProvider(create: (_) => ViewProvider()),
         ChangeNotifierProvider.value(value: authProvider),
         ChangeNotifierProvider(create: (_) => DataProvider(db)),
       ],

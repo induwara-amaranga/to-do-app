@@ -548,9 +548,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 onTap:
                     () => Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => ThemePage(db: widget.db),
-                      ),
+                      MaterialPageRoute(builder: (_) => const ThemePage()),
                     ),
               ),
               _Row(
@@ -1059,20 +1057,13 @@ class _NotificationsPageState extends State<NotificationsPage> {
 // ─────────────────────────────────────────────────────────────────
 
 class ThemePage extends StatelessWidget {
-  final ToDoDataBase db;
-  const ThemePage({super.key, required this.db});
+  const ThemePage({super.key});
 
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final isDark = themeProvider.isDarkMode;
     final cs = Theme.of(context).colorScheme;
-
-    void pickAccent(Color color) {
-      themeProvider.setAccent(color);
-      db.settings = db.settings.copyWith(accentColor: color.toARGB32());
-      db.saveSettings();
-    }
 
     Widget option(
       String label,
@@ -1121,7 +1112,7 @@ class ThemePage extends StatelessWidget {
                   _AccentDot(
                     color: c,
                     selected: c == themeProvider.accent,
-                    onTap: () => pickAccent(c),
+                    onTap: () => themeProvider.setAccent(c),
                   ),
               ],
             ),

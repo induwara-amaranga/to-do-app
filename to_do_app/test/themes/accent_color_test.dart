@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:provider/provider.dart';
 import 'package:to_do_app/components/app_toggle.dart';
-import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/models/settings.dart';
 import 'package:to_do_app/pages/settings_page.dart';
 import 'package:to_do_app/themes/app_colors.dart';
@@ -13,14 +12,6 @@ import 'package:to_do_app/themes/light_mode.dart';
 import 'package:to_do_app/themes/theme_provider.dart';
 
 import '../helpers/test_data.dart';
-
-/// A database whose settings "save" is recorded instead of hitting Hive, so
-/// widget tests do not depend on real disk I/O inside the fake-async zone.
-class _RecordingDb extends ToDoDataBase {
-  int saves = 0;
-  @override
-  void saveSettings() => saves++;
-}
 
 const teal = Color(0xFF0F766E);
 const purple = Color(0xFF7C3AED);
@@ -98,10 +89,7 @@ void main() {
         accentSoftFor(teal, dark: false).computeLuminance(),
         greaterThan(0.6),
       );
-      expect(
-        accentSoftFor(teal, dark: true).computeLuminance(),
-        lessThan(0.1),
-      );
+      expect(accentSoftFor(teal, dark: true).computeLuminance(), lessThan(0.1));
     });
 
     test('AppColors.lerp and copyWith carry the accent', () {
@@ -193,7 +181,8 @@ void main() {
   group('widgets follow the accent', () {
     testWidgets('AppToggle uses the theme accent', (t) async {
       Color track() =>
-          ((t.widget<AnimatedContainer>(find.byType(AnimatedContainer))
+          ((t
+                      .widget<AnimatedContainer>(find.byType(AnimatedContainer))
                       .decoration)
                   as BoxDecoration)
               .color!;
@@ -218,21 +207,24 @@ void main() {
   });
 
   group('Settings > Theme page', () {
-    late _RecordingDb db;
+    final saved = <Color>[];
 
     Future<ThemeProvider> pumpThemePage(
       WidgetTester t, {
       Color accent = kAccent,
     }) async {
-      db = _RecordingDb();
-      final provider = ThemeProvider(accent: accent);
+      saved.clear();
+      final provider = ThemeProvider(
+        accent: accent,
+        onChanged: (_, c) => saved.add(c),
+      );
       await t.pumpWidget(
         ChangeNotifierProvider.value(
           value: provider,
           child: Consumer<ThemeProvider>(
             builder:
                 (_, p, __) =>
-                    MaterialApp(theme: p.themeData, home: ThemePage(db: db)),
+                    MaterialApp(theme: p.themeData, home: const ThemePage()),
           ),
         ),
       );
@@ -286,12 +278,11 @@ void main() {
       );
     });
 
-    testWidgets('the choice is stored in the settings and saved', (t) async {
+    testWidgets('the choice is reported for saving', (t) async {
       await pumpThemePage(t);
       await t.tap(dot(teal));
       await t.pumpAndSettle();
-      expect(db.settings.accentColor, teal.toARGB32());
-      expect(db.saves, 1);
+      expect(saved, [teal]);
     });
 
     testWidgets('picking the default amber restores the original theme', (
@@ -301,7 +292,7 @@ void main() {
       await t.tap(dot(kAccent));
       await t.pumpAndSettle();
       expect(provider.themeData, same(lightMode));
-      expect(db.settings.accentColor, kAccent.toARGB32());
+      expect(saved, [kAccent]);
     });
 
     testWidgets('light and dark appearance rows still work', (t) async {

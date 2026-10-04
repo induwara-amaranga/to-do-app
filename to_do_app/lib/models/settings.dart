@@ -32,6 +32,13 @@ class AppSettings {
   /// Accent colour as an ARGB int (default amber 0xFFFFB31A).
   final int accentColor;
 
+  /// Appearance and list preferences, restored on launch.
+  final bool darkMode;
+  final String taskSortMode; // SortingMode.name
+  final String taskGroupMode; // GroupingMode.name
+  final String timetableView; // 'tileView' | 'listView'
+  final String timetableSortMode; // SortingMode.name
+
   /// True once the user explicitly picks a time zone in Settings.
   /// Until then, [timeZoneLabel] is kept in sync with device auto-detection
   /// on every launch (see main.dart's initLocalTimeZone).
@@ -70,6 +77,11 @@ class AppSettings {
     this.defaultDueDate = 'Today',
     this.timeZoneLabel = 'UTC+5:30',
     this.accentColor = 0xFFFFB31A,
+    this.darkMode = false,
+    this.taskSortMode = 'createdDateDecreasing',
+    this.taskGroupMode = 'Default',
+    this.timetableView = 'tileView',
+    this.timetableSortMode = 'createdDateDecreasing',
     this.timeZoneManuallySet = false,
   });
 
@@ -99,6 +111,11 @@ class AppSettings {
     String? defaultDueDate,
     String? timeZoneLabel,
     int? accentColor,
+    bool? darkMode,
+    String? taskSortMode,
+    String? taskGroupMode,
+    String? timetableView,
+    String? timetableSortMode,
     bool? timeZoneManuallySet,
     String? alarmName,
     String? notifName,
@@ -132,6 +149,11 @@ class AppSettings {
       defaultDueDate: defaultDueDate ?? this.defaultDueDate,
       timeZoneLabel: timeZoneLabel ?? this.timeZoneLabel,
       accentColor: accentColor ?? this.accentColor,
+      darkMode: darkMode ?? this.darkMode,
+      taskSortMode: taskSortMode ?? this.taskSortMode,
+      taskGroupMode: taskGroupMode ?? this.taskGroupMode,
+      timetableView: timetableView ?? this.timetableView,
+      timetableSortMode: timetableSortMode ?? this.timetableSortMode,
       timeZoneManuallySet: timeZoneManuallySet ?? this.timeZoneManuallySet,
     );
   }
@@ -166,6 +188,11 @@ class AppSettings {
     'defaultDueDate': defaultDueDate,
     'timeZoneLabel': timeZoneLabel,
     'accentColor': accentColor,
+    'darkMode': darkMode,
+    'taskSortMode': taskSortMode,
+    'taskGroupMode': taskGroupMode,
+    'timetableView': timetableView,
+    'timetableSortMode': timetableSortMode,
     'timeZoneManuallySet': timeZoneManuallySet,
   };
 
@@ -197,6 +224,12 @@ class AppSettings {
     defaultDueDate: map['defaultDueDate'] as String? ?? 'Today',
     timeZoneLabel: map['timeZoneLabel'] as String? ?? 'UTC+0',
     accentColor: map['accentColor'] as int? ?? 0xFFFFB31A,
+    darkMode: map['darkMode'] as bool? ?? false,
+    taskSortMode: map['taskSortMode'] as String? ?? 'createdDateDecreasing',
+    taskGroupMode: map['taskGroupMode'] as String? ?? 'Default',
+    timetableView: map['timetableView'] as String? ?? 'tileView',
+    timetableSortMode:
+        map['timetableSortMode'] as String? ?? 'createdDateDecreasing',
     timeZoneManuallySet: map['timeZoneManuallySet'] as bool? ?? false,
   );
 }

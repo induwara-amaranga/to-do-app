@@ -34,3 +34,14 @@ extension SortingModeExtension on SortingMode {
     }
   }
 }
+
+/// The mode called [name] (as stored in settings), or [fallback] if unknown.
+SortingMode sortingModeFromName(
+  String? name, {
+  SortingMode fallback = SortingMode.createdDateDecreasing,
+}) {
+  for (final m in SortingMode.values) {
+    if (m.name == name) return m;
+  }
+  return fallback;
+}
