@@ -153,7 +153,8 @@ class GoogleDriveService {
         return uploaded.id;
       }
     } catch (e) {
-      return null;
+      // The caller explains the failure (offline, missing permission...).
+      rethrow;
     }
   }
 

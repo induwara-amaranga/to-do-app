@@ -95,6 +95,33 @@ class DateTimeUtilsHelper {
     return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 
+  /// End of a calendar event that starts at [start] and lasts [duration],
+  /// shortened so it never runs past the end of [start]'s own day (23:59:59).
+  /// A task due at 23:50 therefore gets a 9-minute event instead of one that
+  /// spills into the next day. Works for UTC, local and `tz.TZDateTime` values:
+  /// the result is in the same zone as [start].
+  static DateTime eventEnd(
+    DateTime start, {
+    Duration duration = const Duration(minutes: 30),
+  }) {
+    final endOfDay =
+        start is tz.TZDateTime
+            ? tz.TZDateTime(
+              start.location,
+              start.year,
+              start.month,
+              start.day,
+              23,
+              59,
+              59,
+            )
+            : start.isUtc
+            ? DateTime.utc(start.year, start.month, start.day, 23, 59, 59)
+            : DateTime(start.year, start.month, start.day, 23, 59, 59);
+    final end = start.add(duration);
+    return end.isAfter(endOfDay) ? endOfDay : end;
+  }
+
   /// Converts a  DateTime with local values (assumed in tz.local) to UTC
   static DateTime toUtcUsingLocal(DateTime dateTime) {
     // Wrap the DateTime in tz.TZDateTime using tz.local

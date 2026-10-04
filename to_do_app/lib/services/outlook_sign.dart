@@ -59,6 +59,11 @@ class OutlookAuthService {
     } catch (_) {}
   }
 
+  /// The exception behind the most recent failed sign-in or token step, so the
+  /// UI can tell the user why (offline, expired sign-in...). Cleared when a
+  /// sign-in or token step succeeds.
+  static Object? lastError;
+
   static DateTime? _tokenAt;
   static const _tokenFreshness = Duration(minutes: 5);
 
@@ -83,8 +88,10 @@ class OutlookAuthService {
       // calendar calls use it instead of the one from app start.
       _accessToken = result.accessToken;
       _tokenAt = DateTime.now();
+      lastError = null;
       return result.accessToken;
     } catch (e) {
+      lastError = e;
       return null;
     }
   }
@@ -100,13 +107,16 @@ class OutlookAuthService {
           redirectUri: _redirectUri,
         ),
       );
-    } catch (_) {
+    } catch (e) {
+      lastError = e;
       _initFuture = null; // allow a later retry
     }
   }
 
   static Future<String?> signIn() async {
+    lastError = null;
     try {
+      await init();
       final result = await _pca.acquireToken(
         scopes: [
           'https://graph.microsoft.com/User.Read',
@@ -120,6 +130,7 @@ class OutlookAuthService {
       await storage.write(key: 'outlook_cal_accessToken', value: _accessToken);
       return _accessToken;
     } catch (e) {
+      lastError = e;
       return null;
     }
   }

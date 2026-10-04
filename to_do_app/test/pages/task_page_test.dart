@@ -440,7 +440,17 @@ void cacheAndSyncTests() {
       // The old code slept 1 s after each provider (3 s in all). Here the
       // whole sync must finish within a fraction of a second.
       await settleSync(t);
-      expect(find.text('Calendar synced successfully'), findsOneWidget);
+      // No platform plugins in tests, so the providers fail; the sync still
+      // finishes and reports (see the next group for the wording).
+      expect(find.byType(SnackBar), findsOneWidget);
+    });
+
+    testWidgets('never claims success when a provider failed', (t) async {
+      await pumpTaskPage(t, linked(), settle: false);
+      await settleSync(t);
+      expect(find.text('Calendar synced successfully'), findsNothing);
+      expect(find.text('Fix'), findsOneWidget);
+      expect(find.textContaining('Google Calendar'), findsOneWidget);
     });
 
     testWidgets('waits for the background sign-in restore', (t) async {
@@ -448,11 +458,11 @@ void cacheAndSyncTests() {
       AppStartup.ready = gate.future;
       await pumpTaskPage(t, linked(), settle: false);
       await settleSync(t);
-      expect(find.text('Calendar synced successfully'), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
 
       gate.complete();
       await settleSync(t);
-      expect(find.text('Calendar synced successfully'), findsOneWidget);
+      expect(find.byType(SnackBar), findsOneWidget);
     });
 
     testWidgets('a failing provider does not stop the sync finishing', (

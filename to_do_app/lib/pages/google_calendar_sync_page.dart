@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:to_do_app/components/sync_problem_dialog.dart';
+import 'package:to_do_app/services/sync_problem.dart';
 import 'package:googleapis/calendar/v3.dart' as gcal;
 import 'package:provider/provider.dart';
 import 'package:to_do_app/components/sync_page_widgets.dart';
@@ -81,38 +83,50 @@ class _GoogleCalendarSyncPageState extends State<GoogleCalendarSyncPage> {
     return selected;
   }
 
-  Future<void> _refreshCalendars() async {
-    gcal.CalendarList googCalendars =
-        await widget.calendarAPI.calendarList.list();
+  Future<void> _report(Object e, {Future<void> Function()? retry}) async {
+    debugPrint('Google sync step failed: $e');
+    if (!mounted) return;
+    await showSyncProblem(
+      context,
+      SyncProblem.classify(e, SyncService.googleCalendar),
+      onRetry: retry,
+    );
+  }
 
-    calendars = googCalendars.items ?? [];
-    importCalendars = {for (var cal in calendars) cal.id!: false};
-    syncCalendars = {for (var cal in calendars) cal.id!: false};
-    if (mounted) setState(() {});
+  Future<void> _refreshCalendars() async {
+    try {
+      gcal.CalendarList googCalendars =
+          await widget.calendarAPI.calendarList.list();
+
+      calendars = googCalendars.items ?? [];
+      importCalendars = {for (var cal in calendars) cal.id!: false};
+      syncCalendars = {for (var cal in calendars) cal.id!: false};
+      if (mounted) setState(() {});
+    } catch (e) {
+      await _report(e, retry: _refreshCalendars);
+    }
   }
 
   Future<void> _importSelected() async {
     setState(() {
       isImportLoading = true;
     });
-    final selectedImportCalendars = await _getSelectedCalendars(
-      importCalendars,
-    );
-    final gcal.Calendar? toDoCalendar;
-    toDoCalendar = await GoogleCalendarService.createOrGetCalendar(calendars);
-    if (toDoCalendar == null) {
-      if (mounted) setState(() => isImportLoading = false);
-      return;
-    }
+    try {
+      final selectedImportCalendars = await _getSelectedCalendars(
+        importCalendars,
+      );
+      await GoogleCalendarService.createOrGetCalendar(calendars);
 
-    for (var cal in selectedImportCalendars) {
-      await GoogleCalendarService.importEventsToDB(cal.id!, widget.db);
+      for (var cal in selectedImportCalendars) {
+        await GoogleCalendarService.importEventsToDB(cal.id!, widget.db);
+      }
+      if (!mounted) return;
+      context.read<CalendarSyncProvider>().notify();
+    } catch (e) {
+      await _report(e, retry: _importSelected);
+    } finally {
+      if (mounted) setState(() => isImportLoading = false);
     }
-    if (!mounted) return;
-    context.read<CalendarSyncProvider>().notify();
-    setState(() {
-      isImportLoading = false;
-    });
   }
 
   Future<void> _showViewOnly() async {
@@ -133,15 +147,10 @@ class _GoogleCalendarSyncPageState extends State<GoogleCalendarSyncPage> {
       }
       if (!mounted) return;
       context.read<CalendarSyncProvider>().notify();
-      setState(() {
-        isViewOnlyLoading = false;
-      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          isViewOnlyLoading = false;
-        });
-      }
+      await _report(e, retry: _showViewOnly);
+    } finally {
+      if (mounted) setState(() => isViewOnlyLoading = false);
     }
   }
 
@@ -149,20 +158,32 @@ class _GoogleCalendarSyncPageState extends State<GoogleCalendarSyncPage> {
     setState(() {
       syncToCalendar = value;
     });
-    final gcal.Calendar? toDoCalendar;
     if (value) {
       setState(() {
         isSyncing = true;
       });
-      toDoCalendar = await GoogleCalendarService.createOrGetCalendar(calendars);
-      widget.db.syncToCalendars["google"] = toDoCalendar!.id;
       try {
+        final toDoCalendar = await GoogleCalendarService.createOrGetCalendar(
+          calendars,
+        );
+        widget.db.syncToCalendars["google"] = toDoCalendar!.id;
         await GoogleCalendarService.syncTasksToCalendar(
           widget.db,
           toDoCalendar.id.toString(),
         );
         await GoogleCalendarService.syncTasksFromCalendars(widget.db);
-      } catch (_) {}
+      } catch (e) {
+        // Leave sync switched off so the toggle matches what is really set up.
+        widget.db.syncToCalendars["google"] = "none";
+        if (mounted) {
+          setState(() {
+            syncToCalendar = false;
+            isSyncing = false;
+          });
+        }
+        await _report(e, retry: () => _setSyncEnabled(true));
+        return;
+      }
     } else {
       widget.db.syncToCalendars["google"] = "none";
     }

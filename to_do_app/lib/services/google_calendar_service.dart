@@ -10,6 +10,7 @@ import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/models/calendar_event.dart';
 import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/services/google_sign.dart';
+import 'package:to_do_app/services/sync_problem.dart';
 import 'package:uuid/uuid.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 
@@ -227,7 +228,8 @@ class GoogleCalendarService {
       final start = DateTimeUtilsHelper.utcDateTimeFromUTCvalues(
         startUnflagged,
       );
-      final end = start.add(const Duration(minutes: 30));
+      // 30 minutes, but never past the end of the task's own day.
+      final end = DateTimeUtilsHelper.eventEnd(start);
 
       // If this task has already been linked to a Google event, patch it by id
       // directly. Listing the whole ±60-day window just to find the matching
@@ -465,9 +467,8 @@ class GoogleCalendarService {
   /// Helper to ensure initialization
   static void _requireInit() {
     if (_calendarApi == null) {
-      throw Exception(
-        '❌ GoogleCalendarService not initialized. Call initialize() first.',
-      );
+      // Signed out, or the token step failed: the user has to sign in again.
+      throw const NotSignedInException();
     }
   }
 
@@ -500,10 +501,9 @@ class GoogleCalendarService {
 
       final createdCalendar = await _calendarApi!.calendars.insert(newCalendar);
 
-      // 4️⃣ Optionally add it to calendar list (so it shows up in UI)
-      await _calendarApi!.calendarList.insert(
-        gcal.CalendarListEntry(id: createdCalendar.id),
-      );
+      // Google adds a calendar to its creator's list automatically. Inserting
+      // it again fails with 409 (and needs a wider scope), which made this
+      // method return null even though the calendar had been created.
 
       return gcal.Calendar(
         id: createdCalendar.id,
@@ -511,7 +511,9 @@ class GoogleCalendarService {
         timeZone: createdCalendar.timeZone,
       );
     } catch (_) {
-      return null;
+      // Let the caller see why (missing permission, offline...) so the UI can
+      // explain it; a null here used to be indistinguishable from "cancelled".
+      rethrow;
     }
   }
 

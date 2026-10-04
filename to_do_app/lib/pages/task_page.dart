@@ -18,6 +18,8 @@ import 'package:to_do_app/providers/grouping_provider.dart';
 import 'package:to_do_app/providers/sorting_provider.dart';
 import 'package:to_do_app/providers/searching_provider.dart';
 import 'package:to_do_app/services/cordinate_calendars.dart';
+import 'package:to_do_app/services/sync_problem.dart';
+import 'package:to_do_app/components/sync_problem_dialog.dart';
 import 'package:to_do_app/services/google_calendar_service.dart';
 import 'package:to_do_app/services/google_sign.dart';
 import 'package:to_do_app/services/local_calendar_service.dart';
@@ -1395,32 +1397,45 @@ class _TaskPageState extends State<TaskPage>
     // One job per linked provider. They touch separate lists and boxes, so
     // they run together: the sync takes as long as the slowest provider, and
     // there are no artificial delays between them.
-    final jobs = <Future<void> Function()>[
+    final jobs = <(SyncService?, Future<void> Function())>[
       if (localCalendarId != "none")
-        () => LocalCalendarService.syncTasksFromCalendar(db),
+        (null, () => LocalCalendarService.syncTasksFromCalendar(db)),
       if (outlookCalendarId != "none")
-        () async {
-          await OutlookAuthService.acquireTokenSilently();
-          await OutlookCalendarService.syncTasksFromCalendar(db);
-        },
+        (
+          SyncService.outlookCalendar,
+          () async {
+            await OutlookAuthService.acquireTokenSilently();
+            // A refused token (expired sign-in) surfaces from the first call.
+            await OutlookCalendarService.syncTasksFromCalendar(db);
+          },
+        ),
       if (googleCalendarId != "none")
-        () async {
-          await GoogleAuthService.ensureApisReady();
-          await GoogleCalendarService.syncTasksFromCalendars(db);
-        },
+        (
+          SyncService.googleCalendar,
+          () async {
+            if (!await GoogleAuthService.ensureApisReady()) {
+              throw GoogleAuthService.lastError ?? const NotSignedInException();
+            }
+            await GoogleCalendarService.syncTasksFromCalendars(db);
+          },
+        ),
     ];
     if (jobs.isEmpty) return;
 
     syncProvider.startSync();
     var finished = 0;
+    final problems = <SyncProblem>[];
     await Future.wait([
-      for (final job in jobs)
+      for (final (service, job) in jobs)
         () async {
           try {
             await job();
-          } catch (_) {
+          } catch (e) {
             // One provider failing (offline, signed out) must not stop the
-            // others; its cached events are kept.
+            // others; its cached events are kept. It is reported below.
+            if (service != null) {
+              problems.add(SyncProblem.classify(e, service));
+            }
           }
           finished++;
           syncProvider.updateProgress(finished / jobs.length);
@@ -1431,10 +1446,50 @@ class _TaskPageState extends State<TaskPage>
     // Fix: guard against widget being disposed after the awaits above
     if (!mounted) return;
     _tasksChanged(); // calendar events changed
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Calendar synced successfully"),
+    _reportSyncResult(problems);
+  }
+
+  /// Tells the user how the launch sync went. A problem gets a snackbar with a
+  /// "Fix" button that opens the full explanation; the message never claims
+  /// success when a provider failed.
+  void _reportSyncResult(List<SyncProblem> problems) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    if (problems.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text("Calendar synced successfully"),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final first = problems.firstWhere(
+      (p) => p.kind != SyncProblemKind.offline,
+      orElse: () => problems.first,
+    );
+    final text = switch (first.kind) {
+      SyncProblemKind.offline =>
+        "You're offline. Showing saved calendar events.",
+      SyncProblemKind.missingPermission =>
+        "${first.service.label} needs permission. Tap Fix to allow it.",
+      SyncProblemKind.expiredSignIn =>
+        "${first.service.label} sign-in expired. Tap Fix to sign in again.",
+      _ => "${first.service.label} could not sync. Tap Fix for details.",
+    };
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(text),
         behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: first.kind == SyncProblemKind.offline ? "Retry" : "Fix",
+          onPressed: () {
+            if (!mounted) return;
+            showSyncProblem(context, first, onRetry: importViewOnly);
+          },
+        ),
       ),
     );
   }

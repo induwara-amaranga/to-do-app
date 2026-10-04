@@ -340,4 +340,51 @@ void main() {
       expect(StringUtils.listFromString('[one]'), ['one']);
     });
   });
+
+  group('eventEnd', () {
+    test('adds the duration when it stays inside the day', () {
+      final start = DateTime(2025, 3, 4, 10, 0);
+      expect(DateTimeUtilsHelper.eventEnd(start), DateTime(2025, 3, 4, 10, 30));
+      expect(
+        DateTimeUtilsHelper.eventEnd(start, duration: const Duration(hours: 1)),
+        DateTime(2025, 3, 4, 11, 0),
+      );
+    });
+
+    test('ends exactly at 23:59:59 when the duration would cross midnight', () {
+      expect(
+        DateTimeUtilsHelper.eventEnd(DateTime(2025, 3, 4, 23, 50)),
+        DateTime(2025, 3, 4, 23, 59, 59),
+      );
+      expect(
+        DateTimeUtilsHelper.eventEnd(
+          DateTime(2025, 3, 4, 23, 10),
+          duration: const Duration(hours: 1),
+        ),
+        DateTime(2025, 3, 4, 23, 59, 59),
+      );
+    });
+
+    test('a 30 minute event ending at 23:59:59 sharp is not shortened', () {
+      expect(
+        DateTimeUtilsHelper.eventEnd(DateTime(2025, 3, 4, 23, 29, 59)),
+        DateTime(2025, 3, 4, 23, 59, 59),
+      );
+    });
+
+    test('keeps UTC values in UTC', () {
+      final end = DateTimeUtilsHelper.eventEnd(DateTime.utc(2025, 3, 4, 23, 45));
+      expect(end.isUtc, isTrue);
+      expect(end, DateTime.utc(2025, 3, 4, 23, 59, 59));
+    });
+
+    test('keeps tz.TZDateTime in its zone', () {
+      final start = tz.TZDateTime(tz.local, 2025, 3, 4, 23, 40);
+      final end = DateTimeUtilsHelper.eventEnd(start);
+      expect(end, isA<tz.TZDateTime>());
+      expect(end.day, 4);
+      expect(end.hour, 23);
+      expect(end.minute, 59);
+    });
+  });
 }

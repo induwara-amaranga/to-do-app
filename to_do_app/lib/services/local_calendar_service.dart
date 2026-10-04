@@ -84,8 +84,11 @@ class LocalCalendarService {
                 tz.local,
               )
               : now.add(const Duration(hours: 1));
-      // Build end time 1 hour after start
-      final end = start.add(const Duration(minutes: 30));
+      // 30 minutes after start, but never past the end of the task's own day.
+      final end = tz.TZDateTime.from(
+        DateTimeUtilsHelper.eventEnd(start),
+        tz.local,
+      );
 
       if (!end.isAfter(start)) {
         end.add(const Duration(minutes: 30));

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:to_do_app/components/sync_problem_dialog.dart';
+import 'package:to_do_app/services/sync_problem.dart';
 import 'package:provider/provider.dart';
 import 'package:to_do_app/components/sync_page_widgets.dart';
 import 'package:to_do_app/data/database.dart';
@@ -80,33 +82,45 @@ class _OutlookCalendarSyncPageState extends State<OutlookCalendarSyncPage> {
     return selected;
   }
 
+  Future<void> _report(Object e, {Future<void> Function()? retry}) async {
+    debugPrint('Outlook sync step failed: $e');
+    if (!mounted) return;
+    await showSyncProblem(
+      context,
+      SyncProblem.classify(e, SyncService.outlookCalendar),
+      onRetry: retry,
+    );
+  }
+
   Future<void> _refreshCalendars() async {
-    calendars = await OutlookCalendarService.getAllCalendars();
-    importCalendars = {for (var cal in calendars) cal["id"]!: false};
-    syncCalendars = {for (var cal in calendars) cal["id"]!: false};
-    if (mounted) setState(() {});
+    try {
+      calendars = await OutlookCalendarService.getAllCalendars();
+      importCalendars = {for (var cal in calendars) cal["id"]!: false};
+      syncCalendars = {for (var cal in calendars) cal["id"]!: false};
+      if (mounted) setState(() {});
+    } catch (e) {
+      await _report(e, retry: _refreshCalendars);
+    }
   }
 
   Future<void> _importSelected() async {
     setState(() {
       isImportLoading = true;
     });
-    final selectedImportCalendars = _getSelectedCalendars(importCalendars);
-    final Map<String, dynamic>? toDoCalendar;
-    toDoCalendar = await OutlookCalendarService.createOrGetCalendar(calendars);
-    if (toDoCalendar == null) {
-      if (mounted) setState(() => isImportLoading = false);
-      return;
-    }
+    try {
+      final selectedImportCalendars = _getSelectedCalendars(importCalendars);
+      await OutlookCalendarService.createOrGetCalendar(calendars);
 
-    for (var cal in selectedImportCalendars) {
-      await OutlookCalendarService.importEventsToDB(cal["id"], widget.db);
+      for (var cal in selectedImportCalendars) {
+        await OutlookCalendarService.importEventsToDB(cal["id"], widget.db);
+      }
+      if (!mounted) return;
+      context.read<CalendarSyncProvider>().notify();
+    } catch (e) {
+      await _report(e, retry: _importSelected);
+    } finally {
+      if (mounted) setState(() => isImportLoading = false);
     }
-    if (!mounted) return;
-    context.read<CalendarSyncProvider>().notify();
-    setState(() {
-      isImportLoading = false;
-    });
   }
 
   Future<void> _showViewOnly() async {
@@ -126,15 +140,10 @@ class _OutlookCalendarSyncPageState extends State<OutlookCalendarSyncPage> {
       }
       if (!mounted) return;
       context.read<CalendarSyncProvider>().notify();
-      setState(() {
-        isViewOnlyLoading = false;
-      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          isViewOnlyLoading = false;
-        });
-      }
+      await _report(e, retry: _showViewOnly);
+    } finally {
+      if (mounted) setState(() => isViewOnlyLoading = false);
     }
   }
 
@@ -142,22 +151,32 @@ class _OutlookCalendarSyncPageState extends State<OutlookCalendarSyncPage> {
     setState(() {
       syncToCalendar = value;
     });
-    final Map<String, dynamic>? toDoCalendar;
     if (value) {
       setState(() {
         isSyncing = true;
       });
-      toDoCalendar = await OutlookCalendarService.createOrGetCalendar(
-        calendars,
-      );
-      widget.db.syncToCalendars["outlook"] = toDoCalendar!["id"];
       try {
+        final toDoCalendar = await OutlookCalendarService.createOrGetCalendar(
+          calendars,
+        );
+        widget.db.syncToCalendars["outlook"] = toDoCalendar!["id"];
         await OutlookCalendarService.syncTasksToCalendar(
           widget.db,
           toDoCalendar["id"],
         );
         await OutlookCalendarService.syncTasksFromCalendar(widget.db);
-      } catch (_) {}
+      } catch (e) {
+        // Leave sync switched off so the toggle matches what is really set up.
+        widget.db.syncToCalendars["outlook"] = "none";
+        if (mounted) {
+          setState(() {
+            syncToCalendar = false;
+            isSyncing = false;
+          });
+        }
+        await _report(e, retry: () => _setSyncEnabled(true));
+        return;
+      }
     } else {
       widget.db.syncToCalendars["outlook"] = "none";
     }

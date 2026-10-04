@@ -10,6 +10,8 @@ import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/providers/auth_provider.dart';
 import 'package:to_do_app/services/google_drive_service.dart';
 import 'package:to_do_app/services/google_sign.dart';
+import 'package:to_do_app/services/sync_problem.dart';
+import 'package:to_do_app/components/sync_problem_dialog.dart';
 import 'package:to_do_app/themes/app_colors.dart';
 
 import 'package:to_do_app/components/app_toggle.dart';
@@ -45,6 +47,28 @@ class _MyWidgetState extends State<SignInPage> {
         await GoogleAuthService.ensureApisReady();
       } catch (_) {}
     });
+  }
+
+  /// Runs a Drive step. Makes sure the Google token is usable first, and turns
+  /// any failure into a dialog that says what to do (sign in again, check the
+  /// connection...). [job] returns normally on success.
+  Future<bool> _runDriveJob(Future<void> Function() job) async {
+    try {
+      if (!await GoogleAuthService.ensureApisReady()) {
+        throw GoogleAuthService.lastError ?? const NotSignedInException();
+      }
+      await job();
+      return true;
+    } catch (e) {
+      debugPrint('Google Drive step failed: $e');
+      if (!mounted) return false;
+      await showSyncProblem(
+        context,
+        SyncProblem.classify(e, SyncService.googleDrive),
+        onRetry: () => _runDriveJob(job),
+      );
+      return false;
+    }
   }
 
   @override
@@ -209,36 +233,21 @@ class _MyWidgetState extends State<SignInPage> {
 
                 final hiveFile = File(widget.filePath!);
 
-                // 2. Create/Get folder on Drive
-                final folderId = await GoogleDriveService.createFolder();
-                if (folderId == null) {
-                  return;
-                }
+                final ok = await _runDriveJob(() async {
+                  // 2. Create/Get folder on Drive
+                  final folderId = await GoogleDriveService.createFolder();
+                  if (folderId == null) throw const NotSignedInException();
 
-                // // 3. Get file ID in that folder
-                // String? fileId = await GoogleDriveService.getFileId(folderId);
-
-                // // 4. Download file if exists (await is important!)
-                // if (fileId != null) {
-                //   await GoogleDriveService.downloadFile(
-                //     fileId,
-                //     widget.filePath!,
-                //   );
-                // }
-
-                // 5. Upload local file to Drive (overwrite if necessary)
-                await GoogleDriveService.uploadFileToFolder(hiveFile, folderId);
-
-                // // 6. Reopen Hive box after file is downloaded/overwritten
-                // await Hive.openBox(boxName);
-
-                // // 7. Load or initialize data
-                // if (_myBox.get("TODOLIST") == null &&
-                //     _myBox.get("CATEGORIES") == null) {
-                //   widget.db.createInitialData();
-                // } else {
-                //   widget.db.loadData();
-                // }
+                  // 5. Upload local file to Drive (overwrite if necessary)
+                  await GoogleDriveService.uploadFileToFolder(
+                    hiveFile,
+                    folderId,
+                  );
+                });
+                if (!ok || !context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Backup finished.')),
+                );
               },
 
               style: ElevatedButton.styleFrom(
@@ -266,37 +275,34 @@ class _MyWidgetState extends State<SignInPage> {
                   await Hive.box(boxName).close();
                 }
 
-                //final hiveFile = File(widget.filePath!);
+                bool ok;
+                try {
+                  ok = await _runDriveJob(() async {
+                    // 2. Create/Get folder on Drive
+                    final folderId = await GoogleDriveService.createFolder();
+                    if (folderId == null) throw const NotSignedInException();
 
-                // 2. Create/Get folder on Drive
-                final folderId = await GoogleDriveService.createFolder();
-                if (folderId == null) {
-                  return;
+                    // 3. Get file ID in that folder
+                    String? fileId = await GoogleDriveService.getFileId(
+                      folderId,
+                    );
+
+                    // 4. Download file if exists (await is important!)
+                    if (fileId != null) {
+                      await GoogleDriveService.downloadFile(
+                        fileId,
+                        widget.filePath!,
+                      );
+                    }
+                  });
+                } finally {
+                  // 6. Reopen the box even when the download failed, so the
+                  // app is never left with a closed box.
+                  await Hive.openBox(boxName);
                 }
-
-                // 3. Get file ID in that folder
-                String? fileId = await GoogleDriveService.getFileId(folderId);
-
-                // 4. Download file if exists (await is important!)
-                if (fileId != null) {
-                  await GoogleDriveService.downloadFile(
-                    fileId,
-                    widget.filePath!,
-                  );
-                }
-
-                // // 5. Upload local file to Drive (overwrite if necessary)
-                // final uploadedId = await GoogleDriveService.uploadToFolder(
-                //   hiveFile,
-                //   folderId,
-                // );
-
-                // 6. Reopen Hive box after file is downloaded/overwritten
-                await Hive.openBox(boxName);
 
                 // 7. Load or initialize data
-
-                widget.onImported();
+                if (ok) widget.onImported();
               },
 
               style: ElevatedButton.styleFrom(

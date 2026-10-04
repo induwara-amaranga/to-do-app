@@ -3,6 +3,7 @@ import 'package:googleapis/calendar/v3.dart' as gcal;
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
 import 'package:to_do_app/providers/auth_provider.dart';
+import 'package:to_do_app/services/sync_problem.dart';
 
 class GoogleAuthService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -10,6 +11,12 @@ class GoogleAuthService {
       'email',
       // F-08: calendar.events is sufficient; avoids requesting full calendar settings access
       'https://www.googleapis.com/auth/calendar.events',
+      // calendarList.list() (the calendar picker) is not covered by
+      // calendar.events and fails with 403 "insufficient authentication scopes".
+      'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+      // Lets the app create its own "ToDoList" calendar (calendars.insert) and
+      // manage only calendars it created, not the user's other calendars.
+      'https://www.googleapis.com/auth/calendar.app.created',
       'https://www.googleapis.com/auth/drive.file',
     ],
   );
@@ -21,6 +28,11 @@ class GoogleAuthService {
   // Access tokens last about an hour, so clients built in the last few minutes
   // are reused instead of asking the platform for a token before every call.
   static DateTime? _apisBuiltAt;
+
+  /// The exception behind the most recent failed sign-in or token step, so the
+  /// UI can tell the user why (offline, expired sign-in...) instead of only
+  /// seeing a null result. Cleared when a sign-in or token step succeeds.
+  static Object? lastError;
   static const _apiFreshness = Duration(minutes: 5);
 
   // F-02: silent restore only at startup; interactive sign-in triggered by user action
@@ -37,17 +49,20 @@ class GoogleAuthService {
       if (currentUser != null) await _initApis();
       return currentUser;
     } catch (e) {
+      lastError = e;
       return null;
     }
   }
 
   /// Full sign-in flow (only needed if silent sign-in fails)
   static Future<GoogleSignInAccount?> signIn() async {
+    lastError = null;
     try {
       currentUser = await _googleSignIn.signIn();
       if (currentUser != null) await _initApis();
       return currentUser;
     } catch (e) {
+      lastError = e;
       return null;
     }
   }
@@ -68,11 +83,14 @@ class GoogleAuthService {
       if (account == null) return null;
 
       final auth = await account.authentication; // auto-refreshes if expired
+      if (auth.accessToken == null) throw const NotSignedInException();
+      lastError = null;
       return _GoogleAuthClient({
         'Authorization': 'Bearer ${auth.accessToken}',
         'X-Goog-AuthUser': '0',
       });
     } catch (e) {
+      lastError = e;
       return null;
     }
   }

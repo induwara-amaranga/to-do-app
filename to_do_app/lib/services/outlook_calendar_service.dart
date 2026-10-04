@@ -6,6 +6,7 @@ import 'package:to_do_app/data/database.dart';
 import 'package:to_do_app/models/calendar_event.dart';
 import 'package:to_do_app/models/task.dart';
 import 'package:to_do_app/services/outlook_sign.dart';
+import 'package:to_do_app/services/sync_problem.dart';
 import 'package:to_do_app/utils/date_time_utils.dart';
 import 'dart:convert';
 
@@ -54,7 +55,7 @@ class OutlookCalendarService {
   static Future<Map<String, dynamic>?> createOrGetCalendar(
     List<Map<String, dynamic>> calendars,
   ) async {
-    if (_accessToken == null) throw Exception('Not signed in');
+    if (_accessToken == null) throw const NotSignedInException();
 
     // 1️⃣ Fetch all calendars
     //final calendars = await getAllCalendars();
@@ -90,13 +91,13 @@ class OutlookCalendarService {
       calendars.add(newCalendar);
       return newCalendar;
     } else {
-      return null;
+      throw ServiceHttpException(response.statusCode, response.body);
     }
   }
 
   /// 🔹 Get all Outlook calendars for the signed-in user
   static Future<List<Map<String, dynamic>>> getAllCalendars() async {
-    if (_accessToken == null) throw Exception('Not signed in');
+    if (_accessToken == null) throw const NotSignedInException();
 
     final url = Uri.parse("https://graph.microsoft.com/v1.0/me/calendars");
     final response = await http.get(
@@ -110,7 +111,7 @@ class OutlookCalendarService {
 
       return calendars.cast<Map<String, dynamic>>();
     } else {
-      return [];
+      throw ServiceHttpException(response.statusCode, response.body);
     }
   }
 
@@ -118,7 +119,7 @@ class OutlookCalendarService {
   static Future<List<Map<String, dynamic>>> getCalendarEvents(
     String calendarId,
   ) async {
-    if (_accessToken == null) throw Exception('Not signed in');
+    if (_accessToken == null) throw const NotSignedInException();
 
     final url = Uri.parse(
       "https://graph.microsoft.com/v1.0/me/calendars/$calendarId/events",
@@ -138,7 +139,7 @@ class OutlookCalendarService {
 
   /// 🔹 Delete an event from a specific calendar
   static Future<bool> deleteEvent(String calendarId, String eventId) async {
-    if (_accessToken == null) throw Exception('Not signed in');
+    if (_accessToken == null) throw const NotSignedInException();
 
     final url = Uri.parse(
       "https://graph.microsoft.com/v1.0/me/calendars/$calendarId/events/$eventId",
@@ -161,7 +162,7 @@ class OutlookCalendarService {
     String calendarId,
     Task eventData,
   ) async {
-    if (_accessToken == null) throw Exception('Not signed in');
+    if (_accessToken == null) throw const NotSignedInException();
 
     final String? eventId = eventData.remoteEventIds[2];
 
@@ -193,11 +194,14 @@ class OutlookCalendarService {
             eventData.dueDate!,
             eventData.dueTime!,
           ).toIso8601String();
+      // 30 minutes, but never past the end of the task's own day.
       end =
-          DateTimeUtilsHelper.combineDateAndTimeFromStrings(
-            eventData.dueDate!,
-            eventData.dueTime!,
-          ).add(Duration(hours: 1)).toIso8601String();
+          DateTimeUtilsHelper.eventEnd(
+            DateTimeUtilsHelper.combineDateAndTimeFromStrings(
+              eventData.dueDate!,
+              eventData.dueTime!,
+            ),
+          ).toIso8601String();
     } catch (_) {}
     // 1️⃣ Build event JSON body (example mapping)
     final Map<String, dynamic> eventBody = {
@@ -256,7 +260,7 @@ class OutlookCalendarService {
     String calendarId,
     ToDoDataBase db,
   ) async {
-    if (_accessToken == null) throw Exception('Not signed in');
+    if (_accessToken == null) throw const NotSignedInException();
 
     // Microsoft Graph endpoint
     final url = Uri.parse(
@@ -268,6 +272,9 @@ class OutlookCalendarService {
       headers: {"Authorization": "Bearer $_accessToken"},
     );
 
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw ServiceHttpException(response.statusCode, response.body);
+    }
     if (response.statusCode != 200) {
       return;
     }
@@ -375,7 +382,7 @@ class OutlookCalendarService {
     ToDoDataBase db, {
     bool replace = false,
   }) async {
-    if (_accessToken == null) throw Exception('Not signed in');
+    if (_accessToken == null) throw const NotSignedInException();
 
     // Fetch events
     final url = Uri.parse(
@@ -387,6 +394,9 @@ class OutlookCalendarService {
       headers: {"Authorization": "Bearer $_accessToken"},
     );
 
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw ServiceHttpException(response.statusCode, response.body);
+    }
     if (response.statusCode != 200) {
       return;
     }
