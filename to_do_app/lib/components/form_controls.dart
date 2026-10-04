@@ -148,7 +148,7 @@ class SheetChip extends StatelessWidget {
           color: selected ? colors.accentSoft : null,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? kAccent : colors.outline,
+            color: selected ? context.appColors.accent : colors.outline,
             width: selected ? 1.5 : 1,
           ),
         ),

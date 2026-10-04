@@ -36,7 +36,7 @@ class _BottomNavBarState extends State<TaskBottomNavBar> {
       currentIndex: current,
 
       backgroundColor: Theme.of(context).colorScheme.surface,
-      selectedItemColor: kAccent,
+      selectedItemColor: context.appColors.accent,
       unselectedItemColor: Theme.of(
         context,
       ).colorScheme.onSurface.withValues(alpha: 0.45),

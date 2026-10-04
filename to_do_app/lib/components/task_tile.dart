@@ -275,7 +275,8 @@ class _TaskTileState extends State<TaskTile> {
                         ),
                       ),
                     ),
-                    if (widget.isStarred) Icon(Icons.star, color: kAccent),
+                    if (widget.isStarred)
+                      Icon(Icons.star, color: context.appColors.accent),
                     PopupMenuButton<String>(
                       borderRadius: BorderRadius.circular(20),
                       icon: const Icon(Icons.more_vert),

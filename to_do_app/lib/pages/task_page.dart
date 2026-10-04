@@ -561,8 +561,8 @@ class _TaskPageState extends State<TaskPage>
                         firstDayOfWeek: db.settings.firstDayOfWeek,
                       ),
                 ),
-            backgroundColor: kAccent,
-            foregroundColor: kOnAccent,
+            backgroundColor: context.appColors.accent,
+            foregroundColor: context.appColors.onAccent,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(30),
             ),
@@ -590,8 +590,8 @@ class _TaskPageState extends State<TaskPage>
                           () => setState(
                             () => showCompletedTasks = !showCompletedTasks,
                           ),
-                      backgroundColor: kAccent,
-                      foregroundColor: kOnAccent,
+                      backgroundColor: context.appColors.accent,
+                      foregroundColor: context.appColors.onAccent,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
                       ),
@@ -873,7 +873,7 @@ class _TaskPageState extends State<TaskPage>
                     tasks.length == 1 ? '1 task' : '${tasks.length} tasks',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: kAccent,
+                      color: context.appColors.accent,
                     ),
                   ),
                 ),
@@ -1149,7 +1149,7 @@ class _TaskPageState extends State<TaskPage>
                     width: 50,
                     height: 5,
                     decoration: BoxDecoration(
-                      color: kAccent,
+                      color: context.appColors.accent,
                       borderRadius: BorderRadius.circular(2.5),
                     ),
                   ),
@@ -1275,7 +1275,7 @@ class _TaskPageState extends State<TaskPage>
                   alignment: Alignment.centerRight,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: kAccent,
+                      backgroundColor: context.appColors.accent,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -1285,9 +1285,12 @@ class _TaskPageState extends State<TaskPage>
                       ),
                     ),
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text(
+                    child: Text(
                       'OK',
-                      style: TextStyle(fontSize: 16, color: kOnAccent),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: context.appColors.onAccent,
+                      ),
                     ),
                   ),
                 ),

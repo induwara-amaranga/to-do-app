@@ -128,7 +128,8 @@ class _ImportICSPageState extends State<ImportICSPage> {
                   child: Icon(
                     failed ? Icons.warning : Icons.file_upload,
                     size: 44,
-                    color: failed ? colors.priorityHigh : kAccent,
+                    color:
+                        failed ? colors.priorityHigh : context.appColors.accent,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -151,10 +152,12 @@ class _ImportICSPageState extends State<ImportICSPage> {
                 ),
                 const SizedBox(height: 20),
                 if (_isLoading)
-                  const SizedBox(
+                  SizedBox(
                     height: 48,
                     child: Center(
-                      child: CircularProgressIndicator(color: kAccent),
+                      child: CircularProgressIndicator(
+                        color: context.appColors.accent,
+                      ),
                     ),
                   )
                 else
@@ -208,17 +211,21 @@ class _ImportICSPageState extends State<ImportICSPage> {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: colors.outline),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.file_upload, size: 20, color: kAccent),
+                    Icon(
+                      Icons.file_upload,
+                      size: 20,
+                      color: context.appColors.accent,
+                    ),
                     SizedBox(width: 8),
                     Text(
                       'Choose another file',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: kAccent,
+                        color: context.appColors.accent,
                       ),
                     ),
                   ],
@@ -362,7 +369,7 @@ class _PillButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: kAccent,
+      color: context.appColors.accent,
       shape: const StadiumBorder(),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -372,17 +379,17 @@ class _PillButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 20, color: kOnAccent),
+              Icon(icon, size: 20, color: context.appColors.onAccent),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
-                    color: kOnAccent,
+                    color: context.appColors.onAccent,
                   ),
                 ),
               ),

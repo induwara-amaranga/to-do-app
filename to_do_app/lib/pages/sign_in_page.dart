@@ -242,8 +242,8 @@ class _MyWidgetState extends State<SignInPage> {
               },
 
               style: ElevatedButton.styleFrom(
-                backgroundColor: kAccent,
-                foregroundColor: kOnAccent,
+                backgroundColor: context.appColors.accent,
+                foregroundColor: context.appColors.onAccent,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 28,
@@ -300,8 +300,8 @@ class _MyWidgetState extends State<SignInPage> {
               },
 
               style: ElevatedButton.styleFrom(
-                backgroundColor: kAccent,
-                foregroundColor: kOnAccent,
+                backgroundColor: context.appColors.accent,
+                foregroundColor: context.appColors.onAccent,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 28,

@@ -106,7 +106,9 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(
+          create: (_) => ThemeProvider(accent: Color(db.settings.accentColor)),
+        ),
         ChangeNotifierProvider(create: (_) => GroupingProvider()),
         ChangeNotifierProvider(create: (_) => SortingProvider()),
         ChangeNotifierProvider(create: (_) => SearchingProvider()),

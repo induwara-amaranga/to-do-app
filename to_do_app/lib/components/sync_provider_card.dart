@@ -105,12 +105,12 @@ class SyncProviderCard extends StatelessWidget {
                   ),
                 ),
                 if (loading) ...[
-                  const SizedBox(
+                  SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: kAccent,
+                      color: context.appColors.accent,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -133,7 +133,7 @@ class SyncProviderCard extends StatelessWidget {
                   TextButton.icon(
                     onPressed: loading ? null : onManage,
                     style: TextButton.styleFrom(
-                      foregroundColor: kAccent,
+                      foregroundColor: context.appColors.accent,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 8,

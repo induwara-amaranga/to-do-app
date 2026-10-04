@@ -32,21 +32,24 @@ class _MyDrawerState extends State<MyDrawer> {
           color: context.appColors.accentSoft,
           shape: BoxShape.circle,
         ),
-        child: const Icon(Icons.person, size: 32, color: kAccent),
+        child: Icon(Icons.person, size: 32, color: context.appColors.accent),
       );
     }
     final initial = Container(
       width: 64,
       height: 64,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(color: kAccent, shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        color: context.appColors.accent,
+        shape: BoxShape.circle,
+      ),
       child: Text(
         auth.displayName[0].toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'Manrope',
           fontSize: 28,
           fontWeight: FontWeight.w800,
-          color: kOnAccent,
+          color: context.appColors.onAccent,
         ),
       ),
     );
@@ -255,7 +258,7 @@ class _DrawerItem extends StatelessWidget {
                 color: context.appColors.accentSoft,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, size: 24, color: kAccent),
+              child: Icon(icon, size: 24, color: context.appColors.accent),
             ),
             const SizedBox(width: 14),
             Expanded(

@@ -28,9 +28,9 @@ class CalendarEventsHeader extends StatelessWidget {
           children: [
             Text(
               count > 0 ? 'Calendar Events ($count)' : 'Calendar Events',
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: kAccent,
+                color: context.appColors.accent,
               ),
             ),
             const Spacer(),

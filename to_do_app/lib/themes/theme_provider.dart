@@ -1,24 +1,36 @@
-import 'package:flutter/material.dart ';
+import 'package:flutter/material.dart';
 
-import 'package:to_do_app/themes/dark_mode.dart';
-import 'package:to_do_app/themes/light_mode.dart';
+import 'package:to_do_app/themes/app_colors.dart';
+import 'package:to_do_app/themes/app_theme.dart';
 
 class ThemeProvider with ChangeNotifier {
-  ThemeData _themeData = lightMode;
-  ThemeData get themeData => _themeData;
+  ThemeProvider({Color accent = kAccent}) : _accent = accent {
+    _themeData = buildAppTheme(dark: false, accent: _accent);
+  }
 
-  bool get isDarkMode => _themeData == darkMode;
+  late ThemeData _themeData;
+  Color _accent;
+
+  ThemeData get themeData => _themeData;
+  Color get accent => _accent;
+
+  bool get isDarkMode => _themeData.brightness == Brightness.dark;
+
   set themeData(ThemeData themeData) {
     _themeData = themeData;
     notifyListeners();
   }
 
   void toggleTheme() {
-    if (_themeData == lightMode) {
-      _themeData = darkMode;
-    } else {
-      _themeData = lightMode;
-    }
+    _themeData = buildAppTheme(dark: !isDarkMode, accent: _accent);
+    notifyListeners();
+  }
+
+  /// Recolours the current theme (light or dark) with [color].
+  void setAccent(Color color) {
+    if (color == _accent) return;
+    _accent = color;
+    _themeData = buildAppTheme(dark: isDarkMode, accent: _accent);
     notifyListeners();
   }
 }

@@ -54,7 +54,7 @@ class _CalenderSyncPageState extends State<CalenderSyncPage> {
             fontFamily: 'Manrope',
             fontWeight: FontWeight.w800,
             fontSize: 20,
-            color: kAccent,
+            color: context.appColors.accent,
           ),
         ),
         centerTitle: true,
@@ -68,7 +68,7 @@ class _CalenderSyncPageState extends State<CalenderSyncPage> {
             // Heading
             Row(
               children: [
-                Icon(Icons.sync, size: 26, color: kAccent),
+                Icon(Icons.sync, size: 26, color: context.appColors.accent),
                 const SizedBox(width: 10),
                 const Text(
                   "Select sync method",

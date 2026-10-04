@@ -367,7 +367,7 @@ class _CalendarPageState extends State<CalendarPage> {
             fontFamily: 'Manrope',
             fontWeight: FontWeight.w800,
             fontSize: 20,
-            color: kAccent,
+            color: context.appColors.accent,
           ),
         ),
       ),
@@ -471,16 +471,16 @@ class _CalendarPageState extends State<CalendarPage> {
                   fontSize: 15,
                   color: Colors.white,
                 ),
-                selectedDecoration: const BoxDecoration(
-                  color: kAccent,
+                selectedDecoration: BoxDecoration(
+                  color: context.appColors.accent,
                   shape: BoxShape.circle,
                 ),
-                selectedTextStyle: const TextStyle(
+                selectedTextStyle: TextStyle(
                   fontSize: 15,
-                  color: kOnAccent,
+                  color: context.appColors.onAccent,
                 ),
-                markerDecoration: const BoxDecoration(
-                  color: kAccent,
+                markerDecoration: BoxDecoration(
+                  color: context.appColors.accent,
                   shape: BoxShape.circle,
                 ),
                 markersMaxCount: 1,
@@ -520,7 +520,7 @@ class _CalendarPageState extends State<CalendarPage> {
                       'Tasks',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: kAccent,
+                        color: context.appColors.accent,
                       ),
                     ),
                   ),
@@ -618,11 +618,14 @@ class _CalendarPageState extends State<CalendarPage> {
         ],
       ),
       floatingActionButton: Container(
-        decoration: BoxDecoration(shape: BoxShape.circle, color: kAccent),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: context.appColors.accent,
+        ),
         child: FloatingActionButton(
           heroTag: "Add_Task",
-          backgroundColor: kAccent,
-          foregroundColor: kOnAccent,
+          backgroundColor: context.appColors.accent,
+          foregroundColor: context.appColors.onAccent,
           onPressed:
               () => showModalBottomSheet(
                 isScrollControlled: true,

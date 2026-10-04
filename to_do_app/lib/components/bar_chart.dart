@@ -75,7 +75,7 @@ class MyBarChart extends StatelessWidget {
                 barRods: [
                   BarChartRodData(
                     toY: n.toDouble(),
-                    color: isPeak ? kAccent : colors.trackOff,
+                    color: isPeak ? context.appColors.accent : colors.trackOff,
                     width: 22,
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(6),

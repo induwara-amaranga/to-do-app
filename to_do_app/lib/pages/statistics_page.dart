@@ -253,13 +253,13 @@ class _StatisticsPageState extends State<StatisticsPage> {
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       centerTitle: true,
-      title: const Text(
+      title: Text(
         'Productivity',
         style: TextStyle(
           fontFamily: 'Manrope',
           fontWeight: FontWeight.w800,
           fontSize: 20,
-          color: kAccent,
+          color: context.appColors.accent,
         ),
       ),
     );
@@ -353,8 +353,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
                         value: rate,
                         strokeWidth: 10,
                         backgroundColor: context.appColors.trackOff,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          kAccent,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          context.appColors.accent,
                         ),
                       ),
                     ),
@@ -433,7 +433,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.insights, color: kAccent, size: 20),
+              Icon(Icons.insights, color: context.appColors.accent, size: 20),
               const SizedBox(width: 8),
               Text('Performance Insight', style: _heading),
             ],
@@ -611,7 +611,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
             )
           else
             for (final e in entries)
-              _barRow(e.key, e.value.length, max, kAccent),
+              _barRow(e.key, e.value.length, max, context.appColors.accent),
         ],
       ),
     );

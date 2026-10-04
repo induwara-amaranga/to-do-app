@@ -97,7 +97,7 @@ class _ColorIcon extends StatelessWidget {
         color: context.appColors.accentSoft,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Icon(icon, color: kAccent, size: 24),
+      child: Icon(icon, color: context.appColors.accent, size: 24),
     );
   }
 }
@@ -380,7 +380,11 @@ class _OptionSheetState extends State<_OptionSheet> {
                           ),
                         ),
                         if (selected)
-                          const Icon(Icons.check, size: 22, color: kAccent),
+                          Icon(
+                            Icons.check,
+                            size: 22,
+                            color: context.appColors.accent,
+                          ),
                       ],
                     ),
                   ),
@@ -415,8 +419,8 @@ class _SubScaffold extends StatelessWidget {
         ),
         title: Text(
           title,
-          style: const TextStyle(
-            color: kAccent,
+          style: TextStyle(
+            color: context.appColors.accent,
             fontFamily: 'Manrope',
             fontWeight: FontWeight.w800,
             fontSize: 20,
@@ -472,10 +476,10 @@ class _SettingsPageState extends State<SettingsPage> {
         backgroundColor: cs.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Settings',
           style: TextStyle(
-            color: kAccent,
+            color: context.appColors.accent,
             fontFamily: 'Manrope',
             fontWeight: FontWeight.w800,
             fontSize: 20,
@@ -486,7 +490,7 @@ class _SettingsPageState extends State<SettingsPage> {
           IconButton(
             icon: Icon(
               isDark ? Icons.light_mode : Icons.nightlight_round,
-              color: kAccent,
+              color: context.appColors.accent,
             ),
             onPressed: () => themeProvider.toggleTheme(),
           ),
@@ -544,7 +548,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 onTap:
                     () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const ThemePage()),
+                      MaterialPageRoute(
+                        builder: (_) => ThemePage(db: widget.db),
+                      ),
                     ),
               ),
               _Row(
@@ -687,8 +693,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: kAccent,
-                foregroundColor: kOnAccent,
+                backgroundColor: context.appColors.accent,
+                foregroundColor: context.appColors.onAccent,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -743,15 +749,15 @@ class _ProfileCard extends StatelessWidget {
               Container(
                 width: 56,
                 height: 56,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: kAccent,
+                  color: context.appColors.accent,
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'G',
-                  style: const TextStyle(
-                    color: kOnAccent,
+                  style: TextStyle(
+                    color: context.appColors.onAccent,
                     fontFamily: 'Manrope',
                     fontSize: 24,
                     fontWeight: FontWeight.w800,
@@ -1053,13 +1059,20 @@ class _NotificationsPageState extends State<NotificationsPage> {
 // ─────────────────────────────────────────────────────────────────
 
 class ThemePage extends StatelessWidget {
-  const ThemePage({super.key});
+  final ToDoDataBase db;
+  const ThemePage({super.key, required this.db});
 
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final isDark = themeProvider.isDarkMode;
     final cs = Theme.of(context).colorScheme;
+
+    void pickAccent(Color color) {
+      themeProvider.setAccent(color);
+      db.settings = db.settings.copyWith(accentColor: color.toARGB32());
+      db.saveSettings();
+    }
 
     Widget option(
       String label,
@@ -1074,7 +1087,9 @@ class ThemePage extends StatelessWidget {
         title: label,
         onTap: onTap,
         trailing:
-            selected ? const Icon(Icons.check, size: 18, color: kAccent) : null,
+            selected
+                ? Icon(Icons.check, size: 18, color: context.appColors.accent)
+                : null,
       );
     }
 
@@ -1101,15 +1116,13 @@ class ThemePage extends StatelessWidget {
               alignment: WrapAlignment.center,
               spacing: 12,
               runSpacing: 12,
-              children: const [
-                _AccentDot(kAccent),
-                _AccentDot(Color(0xFF0F766E)),
-                _AccentDot(Color(0xFFDC2626)),
-                _AccentDot(Color(0xFFB45309)),
-                _AccentDot(Color(0xFFBE185D)),
-                _AccentDot(Color(0xFF16A34A)),
-                _AccentDot(Color(0xFF1D4ED8)),
-                _AccentDot(Color(0xFF7C3AED)),
+              children: [
+                for (final c in kAccentChoices)
+                  _AccentDot(
+                    color: c,
+                    selected: c == themeProvider.accent,
+                    onTap: () => pickAccent(c),
+                  ),
               ],
             ),
           ],
@@ -1118,8 +1131,7 @@ class ThemePage extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Text(
-            'Accent selection is a visual preview; the app currently uses its '
-            'built-in color scheme.',
+            'Used for buttons, highlights, toggles and charts.',
             style: TextStyle(fontSize: 12, color: cs.onSurface.withAlpha(120)),
           ),
         ),
@@ -1130,21 +1142,38 @@ class ThemePage extends StatelessWidget {
 
 class _AccentDot extends StatelessWidget {
   final Color color;
-  const _AccentDot(this.color);
+  final bool selected;
+  final VoidCallback onTap;
+  const _AccentDot({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final selected = color == kAccent;
     final cs = Theme.of(context).colorScheme;
-    return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: selected ? cs.onSurface : Colors.transparent,
-          width: 3,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Accent color',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: selected ? cs.onSurface : Colors.transparent,
+              width: 3,
+            ),
+          ),
+          child:
+              selected
+                  ? Icon(Icons.check, size: 18, color: onAccentFor(color))
+                  : null,
         ),
       ),
     );
@@ -1439,15 +1468,15 @@ class AccountPage extends StatelessWidget {
               Container(
                 width: 72,
                 height: 72,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: kAccent,
+                  color: context.appColors.accent,
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'G',
-                  style: const TextStyle(
-                    color: kOnAccent,
+                  style: TextStyle(
+                    color: context.appColors.onAccent,
                     fontSize: 28,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1609,11 +1638,11 @@ class AboutPage extends StatelessWidget {
                 height: 72,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
-                  color: kAccent,
+                  color: context.appColors.accent,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.check_box_outlined,
-                  color: kOnAccent,
+                  color: context.appColors.onAccent,
                   size: 32,
                 ),
               ),

@@ -29,6 +29,9 @@ class AppSettings {
   final String defaultDueDate;
   final String timeZoneLabel;
 
+  /// Accent colour as an ARGB int (default amber 0xFFFFB31A).
+  final int accentColor;
+
   /// True once the user explicitly picks a time zone in Settings.
   /// Until then, [timeZoneLabel] is kept in sync with device auto-detection
   /// on every launch (see main.dart's initLocalTimeZone).
@@ -66,6 +69,7 @@ class AppSettings {
     this.dateFormat = 'd/m/y',
     this.defaultDueDate = 'Today',
     this.timeZoneLabel = 'UTC+5:30',
+    this.accentColor = 0xFFFFB31A,
     this.timeZoneManuallySet = false,
   });
 
@@ -94,6 +98,7 @@ class AppSettings {
     String? dateFormat,
     String? defaultDueDate,
     String? timeZoneLabel,
+    int? accentColor,
     bool? timeZoneManuallySet,
     String? alarmName,
     String? notifName,
@@ -126,6 +131,7 @@ class AppSettings {
       dateFormat: dateFormat ?? this.dateFormat,
       defaultDueDate: defaultDueDate ?? this.defaultDueDate,
       timeZoneLabel: timeZoneLabel ?? this.timeZoneLabel,
+      accentColor: accentColor ?? this.accentColor,
       timeZoneManuallySet: timeZoneManuallySet ?? this.timeZoneManuallySet,
     );
   }
@@ -159,6 +165,7 @@ class AppSettings {
     'dateFormat': dateFormat,
     'defaultDueDate': defaultDueDate,
     'timeZoneLabel': timeZoneLabel,
+    'accentColor': accentColor,
     'timeZoneManuallySet': timeZoneManuallySet,
   };
 
@@ -189,6 +196,7 @@ class AppSettings {
     dateFormat: map['dateFormat'] as String? ?? 'd/m/y',
     defaultDueDate: map['defaultDueDate'] as String? ?? 'Today',
     timeZoneLabel: map['timeZoneLabel'] as String? ?? 'UTC+0',
+    accentColor: map['accentColor'] as int? ?? 0xFFFFB31A,
     timeZoneManuallySet: map['timeZoneManuallySet'] as bool? ?? false,
   );
 }

@@ -80,20 +80,20 @@ class _AiGenerationButtonState extends State<AiGenerationButton> {
           duration: const Duration(milliseconds: 250),
           child:
               isLoading
-                  ? const SizedBox(
+                  ? SizedBox(
                     key: ValueKey('ai_loading'),
                     width: 24,
                     height: 24,
                     child: CircularProgressIndicator(
                       strokeWidth: 3,
-                      color: kAccent,
+                      color: context.appColors.accent,
                     ),
                   )
-                  : const Icon(
+                  : Icon(
                     Icons.auto_awesome,
                     key: ValueKey('ai_icon'),
                     size: 26,
-                    color: kAccent,
+                    color: context.appColors.accent,
                   ),
         ),
       ),

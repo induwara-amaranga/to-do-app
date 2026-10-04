@@ -22,11 +22,11 @@ PreferredSizeWidget syncAppBar(
     iconTheme: IconThemeData(color: cs.onSurface),
     title: Text(
       title,
-      style: const TextStyle(
+      style: TextStyle(
         fontFamily: 'Manrope',
         fontSize: 20,
         fontWeight: FontWeight.w800,
-        color: kAccent,
+        color: context.appColors.accent,
       ),
     ),
     actions: actions,
@@ -173,14 +173,14 @@ class CalendarSection extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             if (loading)
-              const SizedBox(
+              SizedBox(
                 width: 40,
                 height: 40,
                 child: Padding(
                   padding: EdgeInsets.all(8),
                   child: CircularProgressIndicator(
                     strokeWidth: 3,
-                    color: kAccent,
+                    color: context.appColors.accent,
                   ),
                 ),
               )
@@ -194,15 +194,15 @@ class CalendarSection extends StatelessWidget {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: kAccent,
+                    color: context.appColors.accent,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     actionLabel,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
-                      color: kOnAccent,
+                      color: context.appColors.onAccent,
                     ),
                   ),
                 ),
@@ -270,14 +270,18 @@ class CalendarCheckRow extends StatelessWidget {
               width: 22,
               height: 22,
               decoration: BoxDecoration(
-                color: checked ? kAccent : null,
+                color: checked ? context.appColors.accent : null,
                 borderRadius: BorderRadius.circular(6),
                 border:
                     checked ? null : Border.all(color: colors.muted, width: 2),
               ),
               child:
                   checked
-                      ? const Icon(Icons.check, size: 16, color: kOnAccent)
+                      ? Icon(
+                        Icons.check,
+                        size: 16,
+                        color: context.appColors.onAccent,
+                      )
                       : null,
             ),
             const SizedBox(width: 14),
@@ -375,14 +379,14 @@ class SyncTasksSection extends StatelessWidget {
               ),
               const SizedBox(width: 14),
               if (syncing) ...[
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(top: 3),
                   child: SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: kAccent,
+                      color: context.appColors.accent,
                     ),
                   ),
                 ),

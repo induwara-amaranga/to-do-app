@@ -354,8 +354,8 @@ class _CreateTaskSheetState extends State<CreateTaskSheet> {
                       child: ElevatedButton(
                         onPressed: _save,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: kAccent,
-                          foregroundColor: kOnAccent,
+                          backgroundColor: context.appColors.accent,
+                          foregroundColor: context.appColors.onAccent,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 15),
                           shape: const StadiumBorder(),
@@ -468,19 +468,19 @@ class _CreateTaskSheetState extends State<CreateTaskSheet> {
         InkWell(
           onTap: () => _showAddSubTaskDialog(context),
           borderRadius: BorderRadius.circular(8),
-          child: const Padding(
+          child: Padding(
             padding: EdgeInsets.symmetric(vertical: 6),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.add, size: 20, color: kAccent),
+                Icon(Icons.add, size: 20, color: context.appColors.accent),
                 SizedBox(width: 6),
                 Text(
                   'Add subtask',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: kAccent,
+                    color: context.appColors.accent,
                   ),
                 ),
               ],
@@ -572,13 +572,13 @@ class _CreateTaskSheetState extends State<CreateTaskSheet> {
                 fontSize: 15,
                 color: Colors.white,
               ),
-              selectedDecoration: const BoxDecoration(
-                color: kAccent,
+              selectedDecoration: BoxDecoration(
+                color: context.appColors.accent,
                 shape: BoxShape.circle,
               ),
-              selectedTextStyle: const TextStyle(
+              selectedTextStyle: TextStyle(
                 fontSize: 15,
-                color: kOnAccent,
+                color: context.appColors.onAccent,
               ),
             ),
           ),
@@ -869,7 +869,7 @@ class _LabeledFieldState extends State<_LabeledField> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: focused ? kAccent : colors.outline,
+          color: focused ? context.appColors.accent : colors.outline,
           width: focused ? 1.5 : 1,
         ),
       ),
@@ -918,7 +918,7 @@ class _CheckSquare extends StatelessWidget {
         width: 20,
         height: 20,
         decoration: BoxDecoration(
-          color: checked ? kAccent : null,
+          color: checked ? context.appColors.accent : null,
           borderRadius: BorderRadius.circular(4),
           border:
               checked
@@ -927,7 +927,7 @@ class _CheckSquare extends StatelessWidget {
         ),
         child:
             checked
-                ? const Icon(Icons.check, size: 14, color: kOnAccent)
+                ? Icon(Icons.check, size: 14, color: context.appColors.onAccent)
                 : null,
       ),
     );

@@ -27,7 +27,8 @@ class AppToggle extends StatelessWidget {
             padding: const EdgeInsets.all(3),
             alignment: value ? Alignment.centerRight : Alignment.centerLeft,
             decoration: BoxDecoration(
-              color: value ? kAccent : context.appColors.trackOff,
+              color:
+                  value ? context.appColors.accent : context.appColors.trackOff,
               borderRadius: BorderRadius.circular(13),
             ),
             child: Container(

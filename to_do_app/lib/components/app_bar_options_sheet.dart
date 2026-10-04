@@ -261,7 +261,7 @@ class _OptionChip extends StatelessWidget {
           color: selected ? colors.accentSoft : null,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? kAccent : colors.outline,
+            color: selected ? context.appColors.accent : colors.outline,
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -269,7 +269,7 @@ class _OptionChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (selected) ...[
-              const Icon(Icons.check, size: 16, color: kAccent),
+              Icon(Icons.check, size: 16, color: context.appColors.accent),
               const SizedBox(width: 6),
             ],
             Text(
@@ -315,7 +315,7 @@ class _ActionRow extends StatelessWidget {
                 color: colors.accentSoft,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, size: 24, color: kAccent),
+              child: Icon(icon, size: 24, color: context.appColors.accent),
             ),
             const SizedBox(width: 14),
             Expanded(
