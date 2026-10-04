@@ -126,7 +126,8 @@ class _EditCategoriesDialogState extends State<EditCategoriesDialog>
                       ),
                       child: ListTile(
                         title: Text(category),
-                        subtitle: Text("$category tasks"),
+
+                        //subtitle: Text("$category tasks"),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
